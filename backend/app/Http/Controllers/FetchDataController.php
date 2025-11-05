@@ -19,10 +19,10 @@ use Carbon\Carbon;
 
 class FetchDataController extends Controller
 {
-    protected $url = "http://gsq-ibx-rda:8068";
-    protected $db = 'rda_beta_new';
+    protected $url = "https://yxe-odoo-yxe-live.odoo.com";
+    protected $db = 'yxe-odoo-yxe-live-production-18245399';
     // protected $odoo_url = "http://192.168.118.102:8000/odoo/jsonrpc";
-    protected $odoo_url = "http://gsq-ibx-rda:8068/jsonrpc";
+    protected $odoo_url = "https://yxe-odoo-yxe-live.odoo.com/jsonrpc";
 
     private function authenticateDriver(Request $request)
     {
@@ -165,7 +165,7 @@ class FetchDataController extends Controller
             "de_assignation_time", "pl_assignation_time", "dl_assignation_time", "pe_assignation_time", "name", "stage_id", "pe_release_by", "de_release_by","pl_receive_by","dl_receive_by",
             "pl_proof_stock", "pl_proof_filename_stock","dl_hwb_signed","dl_hwb_signed_filename", "dl_delivery_receipt", "dl_delivery_receipt_filename","dl_packing_list", "dl_packing_list_filename",
             "dl_delivery_note","dl_delivery_note_filename","dl_stock_delivery_receipt","dl_stock_delivery_receipt_filename","dl_sales_invoice","dl_sales_invoice_filename", "dl_proof_filename",
-            "pe_proof_filename","de_proof_filename",
+            "pe_proof_filename","de_proof_filename","write_date"
         ];
 
         $fieldsToString =[
@@ -182,7 +182,7 @@ class FetchDataController extends Controller
             "de_assignation_time", "pl_assignation_time", "dl_assignation_time", "pe_assignation_time","stage_id", "pe_release_by", "de_release_by","pl_receive_by","dl_receive_by",
             "pl_proof_stock", "pl_proof_filename_stock","dl_hwb_signed","dl_hwb_signed_filename", "dl_delivery_receipt", "dl_delivery_receipt_filename","dl_packing_list", "dl_packing_list_filename",
             "dl_delivery_note","dl_delivery_note_filename","dl_stock_delivery_receipt","dl_stock_delivery_receipt_filename","dl_sales_invoice","dl_sales_invoice_filename","dl_proof_filename",
-            "pe_proof_filename","de_proof_filename",
+            "pe_proof_filename","de_proof_filename","write_date"
         ];
 
        
@@ -355,6 +355,257 @@ class FetchDataController extends Controller
         unset($manager);
 
         return $filtered;
+    }
+
+    private function processDispatchManagers1(array $domain, array $fields, array $fieldsToString, string $partnerId, bool $filterByDriver = true): array
+    {
+        $odooUrl = "{$this->url}/jsonrpc";
+        $jobUrl = "{$this->url}/job_dispatcher/queue_job";
+        $db = $this->db;
+        $uid = request()->query('uid');
+        $login = request()->header('login');
+        $password = request()->header('password');
+
+        // $fields = [
+        //     "id", "de_request_status", "pl_request_status", "dl_request_status", "pe_request_status",
+        //     "dispatch_type", "de_truck_driver_name", "dl_truck_driver_name", "pe_truck_driver_name", "pl_truck_driver_name",
+        //     "de_request_no", "pl_request_no", "dl_request_no", "pe_request_no", "origin_port_terminal_address", "destination_port_terminal_address", "arrival_date", "delivery_date",
+        //     "container_number", "seal_number", "booking_reference_no", "origin_forwarder_name", "destination_forwarder_name", "freight_booking_number",
+        //     "origin_container_location", "freight_bl_number", "de_proof", "de_signature", "pl_proof", "pl_signature", "dl_proof", "dl_signature", "pe_proof", "pe_signature",
+        //     "freight_forwarder_name", "shipper_phone", "consignee_phone", "dl_truck_plate_no", "pe_truck_plate_no", "de_truck_plate_no", "pl_truck_plate_no",
+        //     "de_truck_type", "dl_truck_type", "pe_truck_type", "pl_truck_type", "shipper_id", "consignee_id", "shipper_contact_id", "consignee_contact_id", "vehicle_name",
+        //     "pickup_date", "departure_date","origin", "destination", "de_completion_time", "booking_status",
+        //     "pl_completion_time", "dl_completion_time", "pe_completion_time", "shipper_province","shipper_city","shipper_barangay","shipper_street", 
+        //     "consignee_province","consignee_city","consignee_barangay","consignee_street", "foas_datetime", "service_type", "booking_service", "pl_proof_filename", 
+        //     "de_assignation_time", "pl_assignation_time", "dl_assignation_time", "pe_assignation_time", "name", "stage_id", "pe_release_by", "de_release_by","pl_receive_by","dl_receive_by",
+        //     "pl_proof_stock", "pl_proof_filename_stock","dl_hwb_signed","dl_hwb_signed_filename", "dl_delivery_receipt", "dl_delivery_receipt_filename","dl_packing_list", "dl_packing_list_filename",
+        //     "dl_delivery_note","dl_delivery_note_filename","dl_stock_delivery_receipt","dl_stock_delivery_receipt_filename","dl_sales_invoice","dl_sales_invoice_filename", "dl_proof_filename",
+        //     "pe_proof_filename","de_proof_filename",
+        // ];
+
+        // $fieldsToString =[
+        //     "de_request_status", "pl_request_status", "dl_request_status", "pe_request_status",
+        //     "dispatch_type", 
+        //     "de_request_no", "pl_request_no", "dl_request_no", "pe_request_no", "origin_port_terminal_address", "destination_port_terminal_address", "arrival_date", "delivery_date",
+        //     "container_number", "seal_number", "booking_reference_no", "origin_forwarder_name", "destination_forwarder_name", "freight_booking_number",
+        //     "origin_container_location", "freight_bl_number", "de_proof", "de_signature", "pl_proof", "pl_signature", "dl_proof", "dl_signature", "pe_proof", "pe_signature",
+        //     "freight_forwarder_name", "shipper_phone", "consignee_phone", "dl_truck_plate_no", "pe_truck_plate_no", "de_truck_plate_no", "pl_truck_plate_no",
+        //     "de_truck_type", "dl_truck_type", "pe_truck_type", "pl_truck_type", "shipper_id", "consignee_id", "shipper_contact_id", "consignee_contact_id", "vehicle_name",
+        //     "pickup_date", "departure_date","origin", "destination", "de_completion_time", "booking_status",
+        //     "pl_completion_time", "dl_completion_time", "pe_completion_time","shipper_province","shipper_city","shipper_barangay","shipper_street",
+        //     "consignee_province","consignee_city","consignee_barangay","consignee_street", "foas_datetime",  "service_type","booking_service","pl_proof_filename", 
+        //     "de_assignation_time", "pl_assignation_time", "dl_assignation_time", "pe_assignation_time","stage_id", "pe_release_by", "de_release_by","pl_receive_by","dl_receive_by",
+        //     "pl_proof_stock", "pl_proof_filename_stock","dl_hwb_signed","dl_hwb_signed_filename", "dl_delivery_receipt", "dl_delivery_receipt_filename","dl_packing_list", "dl_packing_list_filename",
+        //     "dl_delivery_note","dl_delivery_note_filename","dl_stock_delivery_receipt","dl_stock_delivery_receipt_filename","dl_sales_invoice","dl_sales_invoice_filename","dl_proof_filename",
+        //     "pe_proof_filename","de_proof_filename",
+        // ];
+
+       
+       
+
+        // Step 1: Fetch dispatch.manager records
+        $response = jsonRpcRequest($odooUrl, [
+            'jsonrpc' => '2.0',
+            'method' => 'call',
+            'params' => [
+                'service' => 'object',
+                'method' => 'execute_kw',
+                'args' => [
+                    $db,
+                    $uid,
+                    $password,
+                    'dispatch.manager',
+                    'search_read',
+                    [$domain],
+                    ['fields' => $fields]
+                ]
+            ],
+            'id' => rand(1000, 9999)
+        ]);
+
+        $records = $response['result'] ?? [];
+       
+
+        if (empty($records)) {
+            Log::warning("❌ No dispatch.manager records found for driver $partnerId");
+            return [];
+        }
+
+        // Step 2: Filter by driver name
+         $filtered = $records;
+        if ($filterByDriver) {
+            $filtered = array_filter($records, function ($manager) use ($partnerId) {
+                foreach (["de_truck_driver_name", "dl_truck_driver_name", "pe_truck_driver_name", "pl_truck_driver_name"] as $field) {
+                    if (isset($manager[$field][1]) && $manager[$field][1] === $partnerId) {
+                        return true;
+                    }
+                }
+                return false;
+            });
+            $filtered = array_values($filtered);
+        }
+
+
+        // Step 3: Normalize fields and enrich with history
+        $results = [];
+
+        foreach ($filtered as &$manager) {
+            foreach ($fieldsToString as $field) {
+                $value = $manager[$field] ?? null;
+                $manager[$field] = match (true) {
+                    $value === null, $value === false => "",
+                    is_array($value) && isset($value[1]) => $value[1],
+                    is_bool($value) => $value ? "true" : "false",
+                    default => (string) $value
+                };
+            }
+        }
+        unset($manager);
+
+        // foreach($filtered as $manager) {
+        //     jsonRpcRequest($jobUrl, [
+        //         'jsonrpc' => '2.0',
+        //         'method' => 'call',
+        //         'params' => [
+        //             'model' => 'dispatch.manager',
+        //             'id' => $manager['id'],
+        //             'method' => 'run_laravel_job',
+        //         ],
+        //         'id' => rand(1000, 9999)
+        //     ]);
+        // }
+            
+
+        // ✅ Step 3: Fetch ALL milestone histories in one go
+        $dispatchIds = array_column($filtered, 'id');
+        $historyRes = jsonRpcRequest($odooUrl, [
+            'jsonrpc' => '2.0',
+            'method' => 'call',
+            'params' => [
+                'service' => 'object',
+                'method' => 'execute_kw',
+                'args' => [
+                    $db,
+                    $uid,
+                    $password,
+                    'dispatch.milestone.history',
+                    'search_read',
+                    [[['dispatch_id', 'in', $dispatchIds]]],
+                    ['fields' => [
+                        "id", "dispatch_id", "dispatch_type", "fcl_code",
+                        "scheduled_datetime", "actual_datetime", "service_type",
+                    ]]
+                ]
+            ],
+            'id' => rand(1000, 9999)
+        ]);
+
+        $histories = $historyRes['result'] ?? [];
+        // 
+        // ✅ Step 4: Group histories by dispatch_id
+        $historyMap = [];
+        foreach ($histories as $history) {
+            $dispatchId = is_array($history['dispatch_id']) ? $history['dispatch_id'][0] : $history['dispatch_id'];
+            if ($dispatchId !== null) {
+                $historyMap[$dispatchId][] = $history;
+            }
+        }
+
+
+        
+        foreach ($filtered as &$manager) {
+            $manager['history'] = $historyMap[$manager['id']] ?? [];
+
+            $notebookRes = jsonRpcRequest($odooUrl, [
+                'jsonrpc' => '2.0',
+                'method' => 'call',
+                'params' => [
+                    'service' => 'object',
+                    'method' => 'execute_kw',
+                    'args' => [$db, $uid, $password, 'consol.type.notebook', 'search_read',
+                        [['|', ['consol_origin', '=', $manager['id']], ['consol_destination', '=', $manager['id']]]],
+                        ['fields' => ['id', 'consolidation_id','consol_origin', 'consol_destination','type_consol']]
+                    ]
+                ],
+                'id' => rand(1000, 9999)
+            ]);
+
+            $conslMasterId = null;
+            foreach ($notebookRes['result'] as $nb) {
+                $raw = $nb['consolidation_id'] ?? null;
+                if (is_array($raw) && isset($raw[0])) {
+                    $conslMasterId = $raw[0];
+                    $consolOriginId = $nb['consol_origin'] ?? null;
+                    $consolDestinationId = $nb['consol_destination'] ?? null;
+                    $consolType = $nb['type_consol'] ?? null;
+                    break; // take the first valid consolidation
+                }
+            }
+
+            if ($conslMasterId) {
+                $masterRes = jsonRpcRequest($odooUrl, [
+                    'jsonrpc' => '2.0',
+                    'method' => 'call',
+                    'params' => [
+                        'service' => 'object',
+                        'method' => 'execute_kw',
+                        'args' => [$db, $uid, $password, 'pd.consol.master', 'search_read',
+                            [[['id', '=', $conslMasterId]]],
+                            ['fields' => ['id', 'name', 'consolidated_date', 'is_backload', 'is_diverted','status']]
+                        ]
+                    ],
+                    'id' => rand(1000, 9999)
+                ]);
+
+                $consolidationData = $masterRes['result'][0] ?? null;
+                if ($consolidationData) {
+                    $consolidationData['consolidated_date'] = is_string($consolidationData['consolidated_date']) ? $consolidationData['consolidated_date'] : '';
+                    $consolidationData['consol_origin'] = $consolOriginId;
+                    $consolidationData['consol_destination'] = $consolDestinationId;
+                    $consolidationData['type_consol'] = $consolType;
+                    $manager['backload_consolidation'] = $consolidationData;
+                }
+            }
+        }
+        unset($manager);
+
+        return $filtered;
+    }
+
+
+
+    private function fetchReassignedData(string $db, int $uid, string $password, string $partnerId)
+    {
+        $odooUrl = "{$this->url}/jsonrpc";
+      
+        $domain = [
+            ['driver_id', '=', (int)$partnerId] // change to match your Odoo field
+        ];
+
+        $fields = ['id','driver_id', 'dispatch_id', 'request_no', 'create_date', 'request_type']; // only fetch what you need
+
+        $response = jsonRpcRequest($odooUrl, [
+            'jsonrpc' => '2.0',
+            'method' => 'call',
+            'params' => [
+                'service' => 'object',
+                'method' => 'execute_kw',
+                'args' => [
+                    $db,
+                    $uid,
+                    $password,
+                    'driver.reject.reason', // your Odoo model
+                    'search_read',
+                    [$domain],
+                    ['fields' => $fields]
+                ]
+            ],
+            'id' => rand(1000, 9999)
+        ]);
+
+       
+
+        return $response['result'] ?? [];
     }
 
  
@@ -538,13 +789,69 @@ class FetchDataController extends Controller
                     ["pe_truck_driver_name", "=", $partnerId],
                     ["pl_truck_driver_name", "=", $partnerId]
         ];
-        $data = $this->processDispatchManagers($domain, $partnerName);
 
+        $fields = [
+            "id", "de_request_status", "pl_request_status", "dl_request_status", "pe_request_status",
+            "dispatch_type", "de_truck_driver_name", "dl_truck_driver_name", "pe_truck_driver_name", "pl_truck_driver_name",
+            "de_request_no", "pl_request_no", "dl_request_no", "pe_request_no", "booking_reference_no", "freight_booking_number",
+           "freight_bl_number","name", "origin_port_terminal_address","dl_truck_plate_no", "pe_truck_plate_no", "de_truck_plate_no", "pl_truck_plate_no",
+            "de_completion_time", "pl_completion_time", "dl_completion_time", "pe_completion_time", "delivery_date", "pickup_date",
+        ];
+
+        $fieldsToString =[
+            "de_request_status", "pl_request_status", "dl_request_status", "pe_request_status",
+            "dispatch_type", 
+            "de_request_no", "pl_request_no", "dl_request_no", "pe_request_no", "booking_reference_no", "freight_booking_number",
+           "freight_bl_number","name","origin_port_terminal_address","dl_truck_plate_no", "pe_truck_plate_no", "de_truck_plate_no", "pl_truck_plate_no",
+            "de_completion_time", "pl_completion_time", "dl_completion_time", "pe_completion_time", "delivery_date", "pickup_date",
+        ];
+        $data = $this->processDispatchManagers1($domain, $fields, $fieldsToString, $partnerName);
+
+        $reassigned = $this->fetchReassignedData($db, $uid, $odooPassword, $partnerId);
+
+       
       
-        // ✅ Final return
-       return response()->json([
+       foreach ($data as &$tx) {
+            // Collect all possible driver IDs in this transaction
+            $txDriverIds = [];
+
+            foreach (['de_truck_driver_name', 'pl_truck_driver_name', 'dl_truck_driver_name', 'pe_truck_driver_name'] as $field) {
+                if (isset($tx[$field])) {
+                    if (is_array($tx[$field])) {
+                        $txDriverIds[] = intval($tx[$field][0] ?? 0);
+                    } else {
+                        $txDriverIds[] = intval($tx[$field]);
+                    }
+                }
+            }
+
+            $txDriverIds = array_filter($txDriverIds); // remove null/zero
+
+            // Filter reassigned by driver only
+            $tx['reassigned'] = array_values(array_filter($reassigned, function ($r) use ($txDriverIds) {
+                $reassignDriverId = isset($r['driver_id'][0]) ? intval($r['driver_id'][0]) : 0;
+                return in_array($reassignDriverId, $txDriverIds, true);
+            }));
+
+            if (!isset($tx['reassigned']) || !is_array($tx['reassigned'])) {
+                $tx['reassigned'] = [];
+            }
+
+            // Debugging
+            $matchedCount = count($tx['reassigned']);
+            if ($matchedCount > 0) {
+                error_log("✅ TX {$tx['id']} matched {$matchedCount} reassignments by DRIVER ONLY");
+            } else {
+                error_log("⚪ TX {$tx['id']} has NO driver-based reassignment");
+            }
+        }
+        unset($tx);
+
+
+        return response()->json([
             'data' => [
                 'transactions' => $data,
+                'reassigned' => $reassigned,
                 
             ]
         ]);
@@ -603,16 +910,102 @@ class FetchDataController extends Controller
         ];
 
         
-        $data = $this->processDispatchManagers($domain, $partnerName);
+         $fields = [
+            "id", "de_request_status", "pl_request_status", "dl_request_status", "pe_request_status",
+            "dispatch_type", "de_truck_driver_name", "dl_truck_driver_name", "pe_truck_driver_name", "pl_truck_driver_name",
+            "de_request_no", "pl_request_no", "dl_request_no", "pe_request_no", "booking_reference_no", "freight_booking_number",
+           "freight_bl_number","name", "origin_port_terminal_address","dl_truck_plate_no", "pe_truck_plate_no", "de_truck_plate_no", "pl_truck_plate_no",
+            "de_completion_time", "pl_completion_time", "dl_completion_time", "pe_completion_time", "delivery_date", "pickup_date",
+        ];
+
+        $fieldsToString =[
+            "de_request_status", "pl_request_status", "dl_request_status", "pe_request_status",
+            "dispatch_type", 
+            "de_request_no", "pl_request_no", "dl_request_no", "pe_request_no", "booking_reference_no", "freight_booking_number",
+           "freight_bl_number","name","origin_port_terminal_address","dl_truck_plate_no", "pe_truck_plate_no", "de_truck_plate_no", "pl_truck_plate_no",
+            "de_completion_time", "pl_completion_time", "dl_completion_time", "pe_completion_time", "delivery_date", "pickup_date",
+        ];
+
+        $data = $this->processDispatchManagers1($domain, $fields, $fieldsToString, $partnerName);
+
+        $reassigned = $this->fetchReassignedData($db, $uid, $odooPassword, $partnerId);
+
+       
+      
+        foreach ($data as &$tx) {
+            // Collect all possible driver IDs in this transaction
+            $txDriverIds = [];
+
+            foreach (['de_truck_driver_name', 'pl_truck_driver_name', 'dl_truck_driver_name', 'pe_truck_driver_name'] as $field) {
+                if (isset($tx[$field])) {
+                    if (is_array($tx[$field])) {
+                        $txDriverIds[] = intval($tx[$field][0] ?? 0);
+                    } else {
+                        $txDriverIds[] = intval($tx[$field]);
+                    }
+                }
+            }
+
+            $txDriverIds = array_filter($txDriverIds); // remove null/zero
+
+            // Filter reassigned by driver only
+            $tx['reassigned'] = array_values(array_filter($reassigned, function ($r) use ($txDriverIds) {
+                $reassignDriverId = isset($r['driver_id'][0]) ? intval($r['driver_id'][0]) : 0;
+                return in_array($reassignDriverId, $txDriverIds, true);
+            }));
+
+            if (!isset($tx['reassigned']) || !is_array($tx['reassigned'])) {
+                $tx['reassigned'] = [];
+            }
+
+            // Debugging
+            $matchedCount = count($tx['reassigned']);
+            if ($matchedCount > 0) {
+                error_log("✅ TX {$tx['id']} matched {$matchedCount} reassignments by DRIVER ONLY");
+            } else {
+                error_log("⚪ TX {$tx['id']} has NO driver-based reassignment");
+            }
+        }
+        unset($tx);
+
+        // // Exclude transactions older than 30 days
+        // $thirtyDaysAgo = strtotime('-30 days');
+
+        // $data = array_filter($data, function ($tx) use ($thirtyDaysAgo) {
+        //     $dateFields = ['de_completion_time', 'pl_completion_time', 'dl_completion_time', 'pe_completion_time'];
+        //     $latestDate = null;
+
+        //     foreach ($dateFields as $field) {
+        //         if (!empty($tx[$field])) {
+        //             $timestamp = strtotime($tx[$field]);
+        //             if ($timestamp && ($latestDate === null || $timestamp > $latestDate)) {
+        //                 $latestDate = $timestamp;
+        //             }
+        //         }
+        //     }
+
+        //     // If no valid completion date, exclude it
+        //     if (!$latestDate) {
+        //         return false;
+        //     }
+
+        //     // Keep only if completed within the last 30 days
+        //     return $latestDate >= $thirtyDaysAgo;
+        // });
+
+        // // Reindex array
+        // $data = array_values($data);
 
 
-        // ✅ Final return
         return response()->json([
             'data' => [
-                'transactions' => $data
+                'transactions' => $data,
+                'reassigned' => $reassigned,
+                
             ]
         ]);
     }
+
 
     public function getAllBooking(Request $request)
     {
@@ -707,6 +1100,55 @@ class FetchDataController extends Controller
             'current_page' => $page,
             'last_page' => $lastPage
             ]
+        ]);
+    }
+
+    public function reassignment(Request $request)
+    {
+        $db = $this->db;
+        $odooUrl = $this->odoo_url;
+    
+        $user = $this->authenticateDriver($request);
+        if (!is_array($user)) return $user;
+    
+        $uid = $user['uid'];
+        $odooPassword = $request->header('password');
+        $partnerId = $user['partner_id'];
+    
+        $response = jsonRpcRequest($odooUrl, [
+            'jsonrpc' => '2.0',
+            'method' => 'call',
+            'params' => [
+                'service' => 'object',
+                'method' => 'execute_kw',
+                'args' => [
+                    $db,
+                    $uid,
+                    $odooPassword,
+                    'driver.reject.reason',
+                    'search_read',
+                    [
+                        [["driver_id", "=", $partnerId]],
+                    ],
+                    ['fields' => ['id', 'driver_id', 'request_no', 'dispatch_id']]
+                ]
+            ],
+            'id' => rand(1000, 9999)
+        ]);
+    
+        // Handle possible Odoo errors
+        if (isset($response['error'])) {
+            return response()->json([
+                'error' => $response['error']['message'] ?? 'Unknown Odoo error',
+            ], 500);
+        }
+    
+        $records = $response['result'] ?? [];
+    
+        return response()->json([
+            'data' => [
+                'transactions' => $records,
+            ],
         ]);
     }
 }

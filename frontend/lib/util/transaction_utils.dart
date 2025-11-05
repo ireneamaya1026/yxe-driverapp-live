@@ -75,6 +75,7 @@ class TransactionUtils {
             freightBookingNumber: item.freightBookingNumber,
             completedTime: item.deCompletedTime,
             truckPlateNumber: item.deTruckPlateNumber,
+            reassigned: item.reassigned
           ),
         if (item.plTruckDriverName == driverId)
           item.copyWith(
@@ -88,6 +89,7 @@ class TransactionUtils {
             freightBookingNumber: item.freightBookingNumber,
             completedTime: item.plCompletedTime,
             truckPlateNumber: item.plTruckPlateNumber,
+            reassigned: item.reassigned
           ),
       ];
     } else if (item.dispatchType == "dt") {
@@ -107,6 +109,7 @@ class TransactionUtils {
             freightBookingNumber: item.freightBookingNumber,
             completedTime: item.dlCompletedTime,
             truckPlateNumber: item.dlTruckPlateNumber,
+            reassigned: item.reassigned
           ),
         if (item.peTruckDriverName == driverId)
           item.copyWith(
@@ -120,6 +123,7 @@ class TransactionUtils {
             freightBookingNumber: item.freightBookingNumber,
             completedTime: item.peCompletedTime,
             truckPlateNumber: item.peTruckPlateNumber,
+            reassigned: item.reassigned
           ),
       ];
     }
@@ -136,125 +140,210 @@ class TransactionUtils {
         .toList();
   }
 
-static List<Transaction> expandReassignments(List<DriverReassignment> reassignments, String driverId) {
-  return reassignments
-      .where((e) => e.driverId.toString() == driverId)
-      .map((e) => Transaction(
+static List<Transaction> expandReassignments(
+  List<DriverReassignment> reassignments,
+  String currentDriverId,
+  String currentDriverName,
+  List<Transaction> allTransactions,
+) {
+  final result = <Transaction>[];
 
-            id: int.tryParse(e.id.toString()) ?? 0,
-            name: 'Reassigned',
+  String getOriginAddress(String? requestType) {
+    switch (requestType) {
+      case 'DE':
+        return "Deliver Empty Container to Shipper";
+      case 'PL':
+        return "Pickup Laden Container from Shipper";
+      case 'DL':
+        return "Deliver Laden Container to Consignee";
+      case 'PE':
+        return "Pickup Empty Container from Consignee";
+      default:
+        return '';
+    }
+  }
+
+  for (final e in reassignments) {
+    final driverList = e.driverId;
+    String? driverId = (driverList.isNotEmpty && driverList[0] != null)
+        ? driverList[0].toString()
+        : null;
+
+//     final isCurrentDriver = driverId != null && driverId == currentDriverId;
+
+//    // Find original transaction by dispatch_id
+// // 🔹 STEP 1: Extract dispatch ID from reassignment
+// final dispatchIdValue = e.dispatchId.isNotEmpty ? e.dispatchId[0].toString() : null;
+// print('🔸 Checking reassignment id=${e.id}, request=${e.requestNumber}, dispatchId=$dispatchIdValue');
+
+// 🔹 STEP 2: Search for a matching transaction
+
+
+final isCurrentDriver = driverId != null && driverId == currentDriverId;
+if (!isCurrentDriver) {
+  print('⛔ Skipping reassignment ${e.requestNumber} — not current driver');
+  continue;
+}
+
+final dispatchIdValue = e.dispatchId.isNotEmpty ? e.dispatchId[0].toString() : null;
+final requestNumberValue = e.requestNumber;
+print('🔸 Checking reassignment id=${e.id}, request=$requestNumberValue, dispatchId=$dispatchIdValue');
+
+// find matching transaction by request number (and other leg fields)
+final matchingList = allTransactions.where((tx) =>
+    tx.requestNumber == e.requestNumber ||
+    tx.deRequestNumber == e.requestNumber ||
+    tx.plRequestNumber == e.requestNumber ||
+    tx.dlRequestNumber == e.requestNumber ||
+    tx.peRequestNumber == e.requestNumber
+).toList();
+
+final Transaction? matchingTx = matchingList.isNotEmpty ? matchingList.first : null;
+
+// debug prints
+if (matchingTx != null) {
+  print('🟢 MATCHED Transaction by request — id=${matchingTx.id}, '
+        'dispatchName=${matchingTx.name}, reqNo=${matchingTx.requestNumber}');
+} else {
+  print('🔴 NO MATCH FOUND for requestNo=${e.requestNumber}');
+}
+
+    // Build base transaction: either copy existing or create minimal new
+    final baseTx = matchingTx != null
+        ? matchingTx.copyWith(
+            isReassigned: isCurrentDriver,
+            originAddress: getOriginAddress(e.requestType),
+            reassigned: [e],
+          )
+        : Transaction(
+            id: int.tryParse(e.id) ?? 0,
+            name: '',
             requestStatus: 'Reassigned',
             isReassigned: true,
-
             origin: '',
             destination: '',
-            originAddress: '',
+           originAddress: getOriginAddress(e.requestType),
             destinationAddress: '',
-            arrivalDate: '',
-            deliveryDate: '',
-            pickupDate: '',
-            departureDate: '',
-            status: '',
-            isAccepted: false,
-            dispatchType: '',
-            containerNumber: null,
-            freightBlNumber: null,
-            sealNumber: null,
-            bookingRefNo: null,
-            transportForwarderName: null,
-            freightBookingNumber: null,
-            originContainerYard: null,
-            requestNumber: null,
-            deRequestNumber: null,
-            plRequestNumber: null,
-            dlRequestNumber: null,
-            peRequestNumber: null,
-            deRequestStatus: null,
-            plRequestStatus: null,
-            dlRequestStatus: null,
-            peRequestStatus: null,
-            deTruckDriverName: null,
-            dlTruckDriverName: null,
-            peTruckDriverName: null,
-            plTruckDriverName: null,
-            freightForwarderName: null,
-            truckPlateNumber: null,
-            deTruckPlateNumber: null,
-            plTruckPlateNumber: null,
-            dlTruckPlateNumber: null,
-            peTruckPlateNumber: null,
-            truckType: null,
-            deTruckType: null,
-            plTruckType: null,
-            dlTruckType: null,
-            peTruckType: null,
-            contactPerson: null,
-            vehicleName: null,
-            contactNumber: null,
-            deProof: null,
-            plProof: null,
-            dlProof: null,
-            peProof: null,
-            deProofFilename: null,
-            plProofFilename: null,
-            dlProofFilename: null,
-            peProofFilename: null,
-            deSign: null,
-            plSign: null,
-            dlSign: null,
-            peSign: null,
-            login: null,
-            serviceType: null,
-            stageId: null,
-            completedTime: null,
-            deCompletedTime: null,
-            plCompletedTime: null,
-            dlCompletedTime: null,
-            peCompletedTime: null,
-            rejectedTime: null,
-            deRejectedTime: null,
-            plRejectedTime: null,
-            dlRejectedTime: null,
-            peRejectedTime: null,
-            shipperProvince: null,
-            shipperCity: null,
-            shipperBarangay: null,
-            shipperStreet: null,
-            consigneeProvince: null,
-            consigneeCity: null,
-            consigneeBarangay: null,
-            consigneeStreet: null,
-            assignedDate: null,
-            deAssignedDate: null,
-            plAssignedDate: null,
-            dlAssignedDate: null,
-            peAssignedDate: null,
-            peReleasedBy: null,
-            deReleasedBy: null,
-            dlReceivedBy: null,
-            plReceivedBy: null,
-            landTransport: null,
-            writeDate: null,
-            bookingRefNumber: null,
-            history: [],
-            backloadConsolidation: null,
-            reassignment: [],
-            proofStock: null,
-            proofStockFilename: null,
-            hwbSigned: null,
-            hwbSignedFilename: null,
-            deliveryReceipt: null,
-            deliveryReceiptFilename: null,
-            packingList: null,
-            packingListFilename: null,
-            deliveryNote: null,
-            deliveryNoteFilename: null,
-            stockDelivery: null,
-            stockDeliveryFilename: null,
-            salesInvoice: null,
-            salesInvoiceFilename: null,
-          ))
-      .toList();
+           arrivalDate: '',
+        deliveryDate: '',
+        pickupDate: '',
+        departureDate: '',
+        status: '',
+        isAccepted: false,
+        dispatchType: '',
+        containerNumber: null,
+        freightBlNumber: null,
+        sealNumber: null,
+        bookingRefNo: e.dispatchName,
+        transportForwarderName: null,
+        freightBookingNumber: null,
+        originContainerYard: null,
+        requestNumber: e.requestNumber,
+        deRequestNumber: null,
+        plRequestNumber: null,
+        dlRequestNumber: null,
+        peRequestNumber: null,
+        deRequestStatus: null,
+        plRequestStatus: null,
+        dlRequestStatus: null,
+        peRequestStatus: null,
+        deTruckDriverName: null,
+        dlTruckDriverName: null,
+        peTruckDriverName: null,
+        plTruckDriverName: null,
+        freightForwarderName: null,
+        truckPlateNumber: null,
+        deTruckPlateNumber: null,
+        plTruckPlateNumber: null,
+        dlTruckPlateNumber: null,
+        peTruckPlateNumber: null,
+        truckType: null,
+        deTruckType: null,
+        plTruckType: null,
+        dlTruckType: null,
+        peTruckType: null,
+        contactPerson: null,
+        vehicleName: null,
+        contactNumber: null,
+        deProof: null,
+        plProof: null,
+        dlProof: null,
+        peProof: null,
+        deProofFilename: null,
+        plProofFilename: null,
+        dlProofFilename: null,
+        peProofFilename: null,
+        deSign: null,
+        plSign: null,
+        dlSign: null,
+        peSign: null,
+        login: null,
+        serviceType: null,
+        stageId: null,
+        completedTime: e.createDate,
+        deCompletedTime: null,
+        plCompletedTime: null,
+        dlCompletedTime: null,
+        peCompletedTime: null,
+        rejectedTime: null,
+        deRejectedTime: null,
+        plRejectedTime: null,
+        dlRejectedTime: null,
+        peRejectedTime: null,
+        shipperProvince: null,
+        shipperCity: null,
+        shipperBarangay: null,
+        shipperStreet: null,
+        consigneeProvince: null,
+        consigneeCity: null,
+        consigneeBarangay: null,
+        consigneeStreet: null,
+        assignedDate: null,
+        deAssignedDate: null,
+        plAssignedDate: null,
+        dlAssignedDate: null,
+        peAssignedDate: null,
+        peReleasedBy: null,
+        deReleasedBy: null,
+        dlReceivedBy: null,
+        plReceivedBy: null,
+        landTransport: null,
+        writeDate: null,
+        bookingRefNumber: null,
+        history: [],
+        backloadConsolidation: null,
+        reassigned: [e],
+        proofStock: null,
+        proofStockFilename: null,
+        hwbSigned: null,
+        hwbSignedFilename: null,
+        deliveryReceipt: null,
+        deliveryReceiptFilename: null,
+        packingList: null,
+        packingListFilename: null,
+        deliveryNote: null,
+        deliveryNoteFilename: null,
+        stockDelivery: null,
+        stockDeliveryFilename: null,
+        salesInvoice: null,
+        salesInvoiceFilename: null,
+      );
+
+      
+      print('🧩 match result: isCurrentDriver=$isCurrentDriver, driverId=$driverId, currentDriverId=$currentDriverId');
+
+
+    print(
+      '🟢 MATCHED REASSIGNED — id=${baseTx.id}, reqNo=${baseTx.requestNumber}, isReassigned=${baseTx.isReassigned}'
+    );
+
+  
+    // Expand like normal transaction (OT/DT legs)
+    final expanded = TransactionUtils.expandTransaction(baseTx, currentDriverId);
+    result.addAll(expanded);
+  }
+
+  return result;
 }
 
 }

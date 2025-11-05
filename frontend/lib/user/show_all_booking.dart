@@ -253,7 +253,7 @@ class _AllBookingPageState extends ConsumerState<AllBookingScreen>{
               // Safely parse the string to DateTime
               try{
                 final rawDate = tx.dispatchType == "ot" ? tx.pickupDate : tx.deliveryDate;
-                if (rawDate.isEmpty) return false;
+                if (rawDate!.isEmpty) return false;
 
                 // Parse and handle UTC safely
                 final parsedUtc = DateTime.parse(rawDate).toUtc();
@@ -334,7 +334,7 @@ class _AllBookingPageState extends ConsumerState<AllBookingScreen>{
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text (
-                                      item.name,
+                                      item.name!,
                                       style: AppTextStyles.body.copyWith(
                                         fontSize: 14,
                                         fontWeight: FontWeight.bold,

@@ -265,7 +265,7 @@ List<String> getUploadLimit(){
         (tx) {
           final refNum = tx?.bookingRefNumber?.trim();
           final currentRef = bookingNumber?.trim();
-          final dispatch = tx?.dispatchType.toLowerCase().trim();
+          final dispatch = tx?.dispatchType!.toLowerCase().trim();
 
           return refNum != null &&
                 refNum == currentRef &&

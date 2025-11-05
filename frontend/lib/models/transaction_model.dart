@@ -4,18 +4,18 @@ import 'package:frontend/models/milestone_history_model.dart';
 
 class Transaction {
   final int id;
-  final String name;
-  final String origin;
-  final String destination;
-  final String originAddress;
-  final String destinationAddress;
-  final String arrivalDate;
-  final String deliveryDate;
-  final String pickupDate;
-  final String departureDate;
-  final String status;
-  final bool isAccepted;
-  final String dispatchType;
+  final String? name;
+  final String? origin;
+  final String? destination;
+  final String? originAddress;
+  final String? destinationAddress;
+  final String? arrivalDate;
+  final String? deliveryDate;
+  final String? pickupDate;
+  final String? departureDate;
+  final String? status;
+  final bool? isAccepted;
+  final String? dispatchType;
   final String? containerNumber;
   final String? freightBlNumber;
   final String? sealNumber;
@@ -51,7 +51,7 @@ class Transaction {
   final String? peTruckType;
   final String? contactPerson;
   final String? vehicleName;
-  final bool isReassigned;
+  final bool? isReassigned;
 
 
   final String? contactNumber;
@@ -110,9 +110,9 @@ class Transaction {
 
  final String? bookingRefNumber;
 
-  final List<MilestoneHistoryModel> history;
+  final List<MilestoneHistoryModel>? history;
   final ConsolidationModel? backloadConsolidation;
-  final List<DriverReassignment> reassignment;
+  final List<DriverReassignment>? reassigned;
 
   final String? proofStock;
   final String? proofStockFilename;
@@ -134,123 +134,123 @@ class Transaction {
 
   const Transaction({
     required this.id,
-    required this.name,
-    required this.origin,
-    required this.destination,
-    required this.originAddress,
-    required this.destinationAddress,
-    required this.arrivalDate,
-    required this.deliveryDate,
-    required this.status,
-    required this.dispatchType,
-    required this.containerNumber,
-    required this.freightBlNumber,
-    required this.sealNumber,
-    required this.transportForwarderName,
-    required this.bookingRefNo,
-    required this.freightBookingNumber,
-    required this.originContainerYard,
-    required this.requestNumber,
-    required this.deRequestNumber,
-    required this.plRequestNumber,
-    required this.dlRequestNumber,
-    required this.peRequestNumber,
-    required this.requestStatus,
-    required this.deRequestStatus,
-    required this.plRequestStatus,
-    required this.dlRequestStatus,
-    required this.peRequestStatus,
-    required this.deTruckDriverName,
-    required this.dlTruckDriverName,
-    required this.peTruckDriverName,
-    required this.plTruckDriverName,
-    required this.freightForwarderName,
-    required this.contactNumber,
-    required this.truckPlateNumber,
-    required this.deTruckPlateNumber,
-    required this.plTruckPlateNumber,
-    required this.dlTruckPlateNumber,
-    required this.peTruckPlateNumber,
-    required this.deTruckType,
-    required this.plTruckType,
-    required this.dlTruckType,
-    required this.peTruckType,
-    required this.truckType,
-    required this.contactPerson,
-    required this.vehicleName,
-    required this.deProof,
-    required this.plProof,
-    required this.dlProof,
-    required this.peProof,
-     required this.deProofFilename,
-    required this.plProofFilename,
-    required this.dlProofFilename,
-    required this.peProofFilename,
-    required this.deSign,  
-    required this.plSign,   
-    required this.dlSign,   
-    required this.peSign,  
-    required this.pickupDate,   
-    required this.departureDate,   
-    required this.serviceType, 
-    required this.stageId,
-    required this.completedTime,
-    required this.deCompletedTime,
-    required this.plCompletedTime,
-    required this.dlCompletedTime,
-    required this.peCompletedTime,
-    required this.rejectedTime,
-    required this.deRejectedTime,
-    required this.plRejectedTime,
-    required this.dlRejectedTime,
-    required this.peRejectedTime,
-    required this.shipperProvince,
-    required this.shipperCity,
-    required this.shipperBarangay,
-    required this.shipperStreet,
-    required this.consigneeProvince,
-    required this.consigneeCity,
-    required this.consigneeBarangay,
-    required this.consigneeStreet,
-    required this.isAccepted,
-    required this.assignedDate,
-    required this.deAssignedDate,
-    required this.plAssignedDate,
-    required this.dlAssignedDate,
-    required this.peAssignedDate,
-    required this.login,
-    required this.history,
-    required this.landTransport,
-    required this.writeDate,
-    required this.deReleasedBy,
-    required this.peReleasedBy,
-    required this.dlReceivedBy,
-    required this.plReceivedBy,
-    required this.backloadConsolidation,
-    required this.bookingRefNumber,
-    required this.reassignment,
-    // required this.completeAddress,
-    required this.proofStock,
-    required this.proofStockFilename,
-    required this.hwbSigned,
-    required this.hwbSignedFilename,
-    required this.deliveryReceipt,
-    required this.deliveryReceiptFilename,
-    required this.packingList,
-    required this.packingListFilename,
-    required this.deliveryNote,
-    required this.deliveryNoteFilename,
-    required this.stockDelivery,
-    required this.stockDeliveryFilename,
-    required this.salesInvoice,
-    required this.salesInvoiceFilename,
+     this.name,
+     this.origin,
+     this.destination,
+     this.originAddress,
+     this.destinationAddress,
+     this.arrivalDate,
+     this.deliveryDate,
+     this.status,
+     this.dispatchType,
+     this.containerNumber,
+     this.freightBlNumber,
+     this.sealNumber,
+     this.transportForwarderName,
+     this.bookingRefNo,
+     this.freightBookingNumber,
+     this.originContainerYard,
+     this.requestNumber,
+     this.deRequestNumber,
+     this.plRequestNumber,
+     this.dlRequestNumber,
+     this.peRequestNumber,
+     this.requestStatus,
+     this.deRequestStatus,
+     this.plRequestStatus,
+     this.dlRequestStatus,
+     this.peRequestStatus,
+     this.deTruckDriverName,
+     this.dlTruckDriverName,
+     this.peTruckDriverName,
+     this.plTruckDriverName,
+     this.freightForwarderName,
+     this.contactNumber,
+     this.truckPlateNumber,
+     this.deTruckPlateNumber,
+     this.plTruckPlateNumber,
+     this.dlTruckPlateNumber,
+     this.peTruckPlateNumber,
+     this.deTruckType,
+     this.plTruckType,
+     this.dlTruckType,
+     this.peTruckType,
+     this.truckType,
+     this.contactPerson,
+     this.vehicleName,
+     this.deProof,
+     this.plProof,
+     this.dlProof,
+     this.peProof,
+      this.deProofFilename,
+     this.plProofFilename,
+     this.dlProofFilename,
+     this.peProofFilename,
+     this.deSign,  
+     this.plSign,   
+     this.dlSign,   
+     this.peSign,  
+     this.pickupDate,   
+     this.departureDate,   
+     this.serviceType, 
+     this.stageId,
+     this.completedTime,
+     this.deCompletedTime,
+     this.plCompletedTime,
+     this.dlCompletedTime,
+     this.peCompletedTime,
+     this.rejectedTime,
+     this.deRejectedTime,
+     this.plRejectedTime,
+     this.dlRejectedTime,
+     this.peRejectedTime,
+     this.shipperProvince,
+     this.shipperCity,
+     this.shipperBarangay,
+     this.shipperStreet,
+     this.consigneeProvince,
+     this.consigneeCity,
+     this.consigneeBarangay,
+     this.consigneeStreet,
+     this.isAccepted,
+     this.assignedDate,
+     this.deAssignedDate,
+     this.plAssignedDate,
+     this.dlAssignedDate,
+     this.peAssignedDate,
+     this.login,
+     this.history,
+     this.landTransport,
+     this.writeDate,
+     this.deReleasedBy,
+     this.peReleasedBy,
+     this.dlReceivedBy,
+     this.plReceivedBy,
+     this.backloadConsolidation,
+     this.bookingRefNumber,
+     this.reassigned,
+    //  this.completeAddress,
+     this.proofStock,
+     this.proofStockFilename,
+     this.hwbSigned,
+     this.hwbSignedFilename,
+     this.deliveryReceipt,
+     this.deliveryReceiptFilename,
+     this.packingList,
+     this.packingListFilename,
+     this.deliveryNote,
+     this.deliveryNoteFilename,
+     this.stockDelivery,
+     this.stockDeliveryFilename,
+     this.salesInvoice,
+     this.salesInvoiceFilename,
     this.isReassigned = false,
   });
 
   factory Transaction.fromJson(Map<String, dynamic> json) {
     // print('knii Raw transaction JSON: $json');
     final rawConsolidation = json['backload_consolidation'];
-    
+
 
     return Transaction(
       id: json['id'] ?? 0,
@@ -388,11 +388,16 @@ class Transaction {
           ? ConsolidationModel.fromJson(Map<String, dynamic>.from(rawConsolidation))
           : null,
 
-       reassignment: (json['extra_history'] is List)
-        ? (json['extra_history'] as List)
-            .map((e) => DriverReassignment.fromJson(e))
-            .toList()
+       reassigned: (json['reassigned'] is List)
+    ? (json['reassigned'] as List)
+        .map((e) => DriverReassignment.fromJson(e))
+        .toList()
+    : (json['reassigned'] is Map)
+        ? [DriverReassignment.fromJson(json['reassigned'] as Map<String, dynamic>)]
         : [],
+
+        
+
 
 
       // completeAddress: json['origin']?.toString() ?? 'N/A',
@@ -439,7 +444,8 @@ class Transaction {
 
 
 
-  Transaction copyWith({String? name, String? destination,String? requestNumber,String? origin,String? requestStatus,status, bool? isAccepted, String? truckPlateNumber, String? destinationAddress, String? originAddress, String? rejectedTime, String? completedTime, String? assignedDate, String? freightBookingNumber}) {
+  Transaction copyWith({String? name, String? destination,String? requestNumber,String? origin,String? requestStatus,status, bool? isAccepted, String? truckPlateNumber, String? destinationAddress, String? originAddress, String? rejectedTime, String? completedTime, String? assignedDate, String? freightBookingNumber,
+   List<DriverReassignment>? reassigned,  bool? isReassigned}) {
     return Transaction(
       id: id,
       name: name ?? this.name,
@@ -545,7 +551,7 @@ class Transaction {
       login: login,
        history: history,
        backloadConsolidation: backloadConsolidation,
-       reassignment: reassignment,
+       reassigned: reassigned ?? this.reassigned,
 
         // completeAddress: completeAddress, 
 

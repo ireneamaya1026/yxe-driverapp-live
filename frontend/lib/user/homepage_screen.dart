@@ -383,7 +383,7 @@ class _HomepageScreenState extends ConsumerState<HomepageScreen> {
                                                       crossAxisAlignment: CrossAxisAlignment.start,
                                                       children: [
                                                         Text (
-                                                          item.name,
+                                                          item.name!,
                                                           style: AppTextStyles.body.copyWith(
                                                             fontSize: 14,
                                                             fontWeight: FontWeight.bold,

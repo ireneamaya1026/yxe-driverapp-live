@@ -127,7 +127,7 @@ class _ScheduleState extends ConsumerState<ScheduleScreen> {
       MilestoneHistoryModel? emailSchedule;
 
       if(pickupFcl != null) {
-        pickupSchedule = history.firstWhere(
+        pickupSchedule = history!.firstWhere(
           (h) => 
             h.fclCode.trim().toUpperCase() == pickupFcl.toUpperCase() &&
             h.dispatchId == dispatchId.toString() &&
@@ -147,7 +147,7 @@ class _ScheduleState extends ConsumerState<ScheduleScreen> {
       }
 
       if(deliveryFcl != null) {
-        deliverySchedule = history.firstWhere(
+        deliverySchedule = history!.firstWhere(
           (h) => 
             h.fclCode.trim().toUpperCase() == deliveryFcl.toUpperCase() &&
             h.dispatchId == dispatchId.toString() &&
@@ -167,7 +167,7 @@ class _ScheduleState extends ConsumerState<ScheduleScreen> {
       }
 
       if(emailFcl != null) {
-        emailSchedule = history.firstWhere(
+        emailSchedule = history!.firstWhere(
           (h) => 
             h.fclCode.trim().toUpperCase() == emailFcl.toUpperCase() &&
             h.dispatchId == dispatchId.toString() &&
@@ -235,15 +235,44 @@ class _ScheduleState extends ConsumerState<ScheduleScreen> {
   
     if (!mounted) return;
     if (response.statusCode == 200) {
-      setState(() => _isLoading = false);
-      showSuccessDialog(context, "Email Sent!");
+    final scheduleMap = getPickupAndDeliverySchedule(widget.transaction!);
+    final emailModel = scheduleMap['email'];
+
+    if (emailModel != null && widget.transaction?.history != null) {
+      final history = widget.transaction!.history!;
+      final index = history.indexWhere((h) => h.id == emailModel.id);
+
+      if (index != -1) {
+        // ✅ Replace the milestone with a new one that includes actualDatetime
+        final old = history[index];
+        final updated = MilestoneHistoryModel(
+          id: old.id,
+          dispatchId: old.dispatchId,
+          dispatchType: old.dispatchType,
+          fclCode: old.fclCode,
+          scheduledDatetime: old.scheduledDatetime,
+          actualDatetime: timestamp, // ✅ new value here
+          serviceType: old.serviceType,
+          isBackload: old.isBackload,
+        );
+
+        setState(() {
+          history[index] = updated; // ✅ replace old model
+          _isLoading = false;
+        });
+      } else {
+        setState(() => _isLoading = false);
+      }
     } else {
-       setState(() => _isLoading = false);
-      showSuccessDialog(context, "Failed send email!");
-      print("Failed to upload files: ${response.statusCode}");
-     
+      setState(() => _isLoading = false);
     }
 
+    showSuccessDialog(context, "Email Sent!");
+  } else {
+    setState(() => _isLoading = false);
+    showSuccessDialog(context, "Failed to send email!");
+    print("❌ Failed to send email: ${response.statusCode}");
+  }
     
   }
 
@@ -277,6 +306,8 @@ class _ScheduleState extends ConsumerState<ScheduleScreen> {
 
   
   bool isAlreadyNotified = email?.actualDatetime != null ;
+  final hasActualDatetime = email?.actualDatetime != null &&
+    email!.actualDatetime!.trim().isNotEmpty;
 
   int currentStep = 2; // Assuming Schedule is step 2 (0-based index)
   final bookingNumber = widget.transaction?.bookingRefNumber;
@@ -292,7 +323,7 @@ class _ScheduleState extends ConsumerState<ScheduleScreen> {
         (tx) {
           final refNum = tx?.bookingRefNumber?.trim();
           final currentRef = bookingNumber?.trim();
-          final dispatch = tx?.dispatchType.toLowerCase().trim();
+          final dispatch = tx?.dispatchType!.toLowerCase().trim();
 
           return refNum != null &&
                 refNum == currentRef &&
@@ -491,19 +522,12 @@ class _ScheduleState extends ConsumerState<ScheduleScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: (!isAlreadyNotified || _isLoading)
-                        ? null
-                        : _sendEmail, 
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: (!isAlreadyNotified || _isLoading)
-                          ? Colors.grey
-                          : mainColor,
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(30.0),
-                        ),
-                      ),
-                      
+                        onPressed: (hasActualDatetime || _isLoading) ? null : _sendEmail,
+  style: ElevatedButton.styleFrom(
+    backgroundColor: (hasActualDatetime || _isLoading)
+        ? Colors.grey
+        : mainColor,
+  ),
                       child:  _isLoading
                         ? const SizedBox(
                             width: 22,

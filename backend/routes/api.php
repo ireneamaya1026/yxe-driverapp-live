@@ -42,4 +42,6 @@ Route::middleware([HandleCors::class])->group(function () {
 
     Route::post('/odoo/notify', [TransactionController::class, 'notifyShipperConsignee']);
 
+    Route::get('/odoo/booking/reassignment', [FetchDataController::class, 'reassignment']);
+
 });

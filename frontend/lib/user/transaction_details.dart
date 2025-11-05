@@ -175,7 +175,7 @@ class _TransactionDetailsState extends ConsumerState<TransactionDetails> {
       MilestoneHistoryModel? deliverySchedule;
 
       if(pickupFcl != null) {
-        pickupSchedule = history.firstWhere(
+        pickupSchedule = history!.firstWhere(
           (h) => 
             h.fclCode.trim().toUpperCase() == pickupFcl.toUpperCase() &&
             h.dispatchId == dispatchId.toString() &&
@@ -195,7 +195,7 @@ class _TransactionDetailsState extends ConsumerState<TransactionDetails> {
       }
 
       if(deliveryFcl != null) {
-        deliverySchedule = history.firstWhere(
+        deliverySchedule = history!.firstWhere(
           (h) => 
             h.fclCode.trim().toUpperCase() == deliveryFcl.toUpperCase() &&
             h.dispatchId == dispatchId.toString() &&
@@ -334,7 +334,7 @@ final delivery = scheduleMap['delivery'];
                  
                       padding: const EdgeInsets.symmetric(horizontal: 12.0),
                       child: Text(
-                        widget.transaction!.originAddress.toUpperCase(), // Section Title
+                        widget.transaction!.originAddress!.toUpperCase(), // Section Title
                         style: AppTextStyles.caption.copyWith(
                           fontWeight: FontWeight.bold,
                           color: mainColor,
@@ -937,6 +937,23 @@ final delivery = scheduleMap['delivery'];
       }
     }
 
+    List<Map<String, dynamic>> singleFile = [];
+    
+    void addFile(List<Map<String, dynamic>> targetList, String? base64, String? filename) {
+      if (base64 != null && base64.trim().isNotEmpty) {
+        final decoded = decodeBase64(base64);
+        if (decoded != null) {
+          final safeName = (filename == null || filename.trim().isEmpty)
+              ? 'file_${targetList.length + 1}.png'
+              : filename;
+          targetList.add({
+            "bytes": decoded,
+            "filename": safeName,
+          });
+        }
+      }
+    }
+
     String? signBase64;
     String? proofBase64;
     String? filename;
@@ -949,20 +966,24 @@ final delivery = scheduleMap['delivery'];
         signBase64 = widget.transaction?.plSign;
         proofBase64 = widget.transaction?.plProof;
         filename = widget.transaction?.plProofFilename;
+        addFile(singleFile, widget.transaction?.plProof, widget.transaction?.plProofFilename); // shipper has plProof
       } else if (widget.transaction?.requestNumber == widget.transaction?.peRequestNumber) {
         signBase64 = widget.transaction?.deSign;
         proofBase64 = widget.transaction?.deProof;
         filename = widget.transaction?.deProofFilename;
+        addFile(singleFile, widget.transaction?.deProof, widget.transaction?.deProofFilename);
       }
     } else {
       if (widget.transaction?.requestNumber == widget.transaction?.deRequestNumber) {
         signBase64 = widget.transaction?.peSign;
         proofBase64 = widget.transaction?.peProof;
         filename = widget.transaction?.peProofFilename;
+        addFile(singleFile, widget.transaction?.peProof, widget.transaction?.peProofFilename);
       } else if (widget.transaction?.requestNumber == widget.transaction?.plRequestNumber) {
         signBase64 = widget.transaction?.dlSign;
         proofBase64 = widget.transaction?.dlProof;
         filename = widget.transaction?.dlProofFilename;
+        addFile(singleFile, widget.transaction?.dlProof, widget.transaction?.dlProofFilename);
        
       }
     }
@@ -982,7 +1003,17 @@ final delivery = scheduleMap['delivery'];
         ),
         const SizedBox(height: 10),
         if (proofBytes != null)
-        _buildDownloadButton("POD", proofBytes),
+        Wrap(
+          alignment: WrapAlignment.start,
+          spacing: 8, // horizontal gap
+          runSpacing: 8, // vertical gap
+          children: singleFile.map((file) {
+            return _buildDownloadButton(
+              file["filename"] as String,
+              file["bytes"] as Uint8List,
+            );
+          }).toList(),
+        ),
 
         const SizedBox(height: 10),
 
@@ -1119,82 +1150,92 @@ final delivery = scheduleMap['delivery'];
         child: Padding(
         padding: const EdgeInsets.only(bottom: 8),
         child: TextButton.icon(
-              onPressed: null,
-              // () async {
-            //     try {
-            //       if (Platform.isAndroid) {
-            //         int sdk = (await DeviceInfoPlugin().androidInfo).version.sdkInt;
+              onPressed: 
+              () async {
+                try {
+                  if (Platform.isAndroid) {
+                    int sdk = (await DeviceInfoPlugin().androidInfo).version.sdkInt;
 
-            //         if (sdk <= 29) {
-            //           // ✅ Android 9 & 10
-            //           await Permission.storage.request();
-            //         } else {
-            //           // ✅ Android 11+
-            //           if (await Permission.manageExternalStorage.isDenied) {
-            //             await Permission.manageExternalStorage.request();
-            //           }
-            //         }
-            //       }
+                    if (sdk <= 29) {
+                      // ✅ Android 9 & 10
+                      await Permission.storage.request();
+                    } else {
+                      // ✅ Android 11+
+                      if (await Permission.manageExternalStorage.isDenied) {
+                        await Permission.manageExternalStorage.request();
+                      }
+                    }
+                  }
 
-            //       Directory dir = Platform.isAndroid
-            //           ? Directory('/storage/emulated/0/Download')
-            //           : await getApplicationDocumentsDirectory();
+                  Directory dir = Platform.isAndroid
+                      ? Directory('/storage/emulated/0/Download')
+                      : await getApplicationDocumentsDirectory();
 
-            //       if (!await dir.exists()) {
-            //         dir = await getExternalStorageDirectory() ?? dir;
-            //       }
+                  if (!await dir.exists()) {
+                    dir = await getExternalStorageDirectory() ?? dir;
+                  }
+                  
+                  final ext = fileName.split('.').last;
+                  final baseName = fileName.replaceAll('.$ext', '');
+                  String uniqueFileName =  fileName;
 
-            //   final file = File('${dir.path}/$fileName');
-            //   await file.writeAsBytes(bytes);
+                  int counter = 1;
+                   while (File('${dir.path}/$uniqueFileName').existsSync()) {
+                    uniqueFileName = '$baseName($counter).$ext';
+                    counter++;
+                  }
+                  
+                  final file = File('${dir.path}/$uniqueFileName');
+                  await file.writeAsBytes(bytes);
+                  
+                  if(context.mounted){
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          '✅ Downloaded: $uniqueFileName',
+                          style: AppTextStyles.caption.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        duration: const Duration(seconds: 2),
+                        behavior: SnackBarBehavior.floating, // ✅ Makes it float with margin
+                        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        shape: RoundedRectangleBorder( // ✅ Rounded corners
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        backgroundColor: mainColor, // ✅ Soft black, not pure #000
+                        elevation: 6, // ✅ Soft shadow for depth
+                      ),
+                    );
+                  }
 
-            //   if(context.mounted){
-            //     ScaffoldMessenger.of(context).showSnackBar(
-            //       SnackBar(
-            //         content: Text(
-            //           '✅ Downloaded: $fileName',
-            //           style: AppTextStyles.caption.copyWith(
-            //             color: Colors.white,
-            //             fontWeight: FontWeight.w500,
-            //           ),
-            //         ),
-            //         duration: const Duration(seconds: 2),
-            //         behavior: SnackBarBehavior.floating, // ✅ Makes it float with margin
-            //         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            //         shape: RoundedRectangleBorder( // ✅ Rounded corners
-            //           borderRadius: BorderRadius.circular(12),
-            //         ),
-            //         backgroundColor: mainColor, // ✅ Soft black, not pure #000
-            //         elevation: 6, // ✅ Soft shadow for depth
-            //       ),
-            //     );
-            //   }
-
-            //   print('✅ File saved: ${file.path}');
-            // } catch (e) {
-            //   print('❌ Save failed: $e');
-            //   if(context.mounted){
-            //     ScaffoldMessenger.of(context).showSnackBar(
-            //       SnackBar(
-            //         content: Text(
-            //           '❌ Download failed: $fileName',
-            //           style: AppTextStyles.caption.copyWith(
-            //             color: Colors.white,
-            //             fontWeight: FontWeight.w500,
-            //           ),
-            //         ),
-            //         duration: const Duration(seconds: 2),
-            //         behavior: SnackBarBehavior.floating, // ✅ Makes it float with margin
-            //         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            //         shape: RoundedRectangleBorder( // ✅ Rounded corners
-            //           borderRadius: BorderRadius.circular(12),
-            //         ),
-            //         backgroundColor: Colors.red, // ✅ Soft black, not pure #000
-            //         elevation: 6, // ✅ Soft shadow for depth
-            //       ),
-            //     );
-            //   }
-            // }
-                  // },
+                  print('✅ File saved: ${file.path}');
+                } catch (e) {
+                  print('❌ Save failed: $e');
+                  if(context.mounted){
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          '❌ Download failed: $fileName',
+                          style: AppTextStyles.caption.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        duration: const Duration(seconds: 2),
+                        behavior: SnackBarBehavior.floating, // ✅ Makes it float with margin
+                        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        shape: RoundedRectangleBorder( // ✅ Rounded corners
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        backgroundColor: Colors.red, // ✅ Soft black, not pure #000
+                        elevation: 6, // ✅ Soft shadow for depth
+                      ),
+                    );
+                  }
+                }
+              },
               icon: const Icon(Icons.download),
               label:Text(
                 'Download $fileName',

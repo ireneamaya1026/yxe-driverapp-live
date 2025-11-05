@@ -36,102 +36,93 @@ class HistoryScreen extends ConsumerStatefulWidget{
 class _HistoryPageState extends ConsumerState<HistoryScreen> {
   String? uid;
  Future<List<Transaction>>? _futureTransactions;
-
-Map<String, MilestoneHistoryModel?> getPickupAndDeliverySchedule(Transaction? transaction) {
-  // If transaction itself is null, return early
-  if (transaction == null) {
-    return {
-      'pickup': null,
-      'delivery': null,
-      'email': null,
+// ------------------- LEG HELPERS -------------------
+  String? _getLegForTransaction(Transaction tx) {
+    final legRequestMap = {
+      'de': tx.deRequestNumber,
+      'pl': tx.plRequestNumber,
+      'dl': tx.dlRequestNumber,
+      'pe': tx.peRequestNumber,
     };
+    final entry = legRequestMap.entries.firstWhere(
+      (e) => e.value == tx.requestNumber,
+      orElse: () => const MapEntry('', null),
+    );
+    return entry.key.isEmpty ? null : entry.key;
   }
 
-  final dispatchType = transaction.dispatchType;
-  final history = transaction.history ?? [];
-  final serviceType = transaction.serviceType;
-  final dispatchId = transaction.id?.toString();
-  final requestNumber = transaction.requestNumber;
+MilestoneHistoryModel? _getLatestMilestoneForLeg(Transaction tx, String leg) {
+  if (tx.history == null || tx.history!.isEmpty) return null;
 
-  final fclPrefixes = {
-    'ot': {
-      'Full Container Load': {
-        'de': {'delivery': 'TEOT', 'pickup': 'TYOT'},
-        'pl': {'delivery': 'CLOT', 'pickup': 'TLOT', 'email': 'ELOT'},
-      },
-      'Less-Than-Container Load': {
-        'pl': {'delivery': 'LCLOT', 'pickup': 'LTEOT'},
-      },
-    },
-    'dt': {
-      'Full Container Load': {
-        'dl': {'delivery': 'CLDT', 'pickup': 'GYDT'},
-        'pe': {'delivery': 'CYDT', 'pickup': 'GLDT', 'email': 'EEDT'},
-      },
-      'Less-Than-Container Load': {
-        'pl': {'delivery': 'LCLOT', 'pickup': 'LTEOT'},
-      },
-    },
-  };
+  // Filter history by dispatchId and leg
+  final matchingHistory = tx.history!
+      .where((h) =>
+          h.dispatchId.toString() == tx.id.toString() &&
+          h.fclCode.toUpperCase().startsWith(leg.toUpperCase()) && // optional if your FCL codes use leg prefixes
+          h.actualDatetime?.isNotEmpty == true)
+      .toList();
 
-  final fclCodeMap = {
-    'de': transaction.deRequestNumber,
-    'pl': transaction.plRequestNumber,
-    'dl': transaction.dlRequestNumber,
-    'pe': transaction.peRequestNumber,
-  };
+  if (matchingHistory.isEmpty) {
+    // If none match by FCL prefix, fallback to any milestone for this dispatchId
+    final fallbackHistory = tx.history!
+        .where((h) =>
+            h.dispatchId.toString() == tx.id.toString() &&
+            h.actualDatetime.isNotEmpty == true)
+        .toList();
 
-  // Find which leg matches this transaction
-  String? matchingLegs;
-  for (final entry in fclCodeMap.entries) {
-    if (entry.value != null && entry.value == requestNumber) {
-      matchingLegs = entry.key;
-      break;
-    }
+    if (fallbackHistory.isEmpty) return null;
+
+    fallbackHistory.sort((a, b) {
+      final aTime = DateTime.tryParse(a.actualDatetime) ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final bTime = DateTime.tryParse(b.actualDatetime) ?? DateTime.fromMillisecondsSinceEpoch(0);
+      return bTime.compareTo(aTime);
+    });
+
+    return fallbackHistory.first;
   }
 
-  print("Matching Leg for $requestNumber: $matchingLegs");
+  // Sort by latest datetime
+  matchingHistory.sort((a, b) {
+    final aTime = DateTime.tryParse(a.actualDatetime!) ?? DateTime.fromMillisecondsSinceEpoch(0);
+    final bTime = DateTime.tryParse(b.actualDatetime!) ?? DateTime.fromMillisecondsSinceEpoch(0);
+    return bTime.compareTo(aTime);
+  });
 
-  if (matchingLegs == null) {
-    return {'pickup': null, 'delivery': null, 'email': null};
-  }
-
-  final fclMap = fclPrefixes[dispatchType]?[serviceType]?[matchingLegs];
-  if (fclMap == null) {
-    return {'pickup': null, 'delivery': null, 'email': null};
-  }
-
-  final pickupFcl = fclMap['pickup'];
-  final deliveryFcl = fclMap['delivery'];
-  final emailFcl = fclMap['email'];
-
-  MilestoneHistoryModel? findSchedule(String? fcl) {
-    if (fcl == null) return null;
-    try {
-      final result = history.firstWhere(
-        (h) =>
-            h.fclCode.trim().toUpperCase() == fcl.toUpperCase() &&
-            h.dispatchId == dispatchId &&
-            h.serviceType == serviceType,
-      );
-      return result;
-    } catch (_) {
-      return null;
-    }
-
-    
-  }
-
-  final pickupSchedule = findSchedule(pickupFcl);
-  final deliverySchedule = findSchedule(deliveryFcl);
-  final emailSchedule = findSchedule(emailFcl);
-
-  return {
-    'pickup': pickupSchedule,
-    'delivery': deliverySchedule,
-    'email': emailSchedule,
-  };
+  return matchingHistory.first;
 }
+
+
+Map<String, String> getCompletedTransactionDatetime(Transaction tx) {
+  final leg = _getLegForTransaction(tx);
+  MilestoneHistoryModel? milestone;
+
+  if (leg != null) {
+    milestone = _getLatestMilestoneForLeg(tx, leg);
+  }
+
+  String? rawDateTime;
+
+if (tx.requestStatus == 'Completed') {
+  rawDateTime = tx.completedTime?.isNotEmpty == true
+      ? tx.completedTime
+      : milestone?.actualDatetime ?? tx.backloadConsolidation?.consolidatedDatetime ?? tx.writeDate;
+} else if (tx.requestStatus == 'Backload') {
+  rawDateTime = tx.backloadConsolidation?.consolidatedDatetime?.isNotEmpty == true
+      ? tx.backloadConsolidation?.consolidatedDatetime
+      : milestone?.actualDatetime ?? tx.completedTime ?? tx.writeDate;
+} else if (tx.stageId == 'Cancelled') {
+  rawDateTime = tx.writeDate?.isNotEmpty == true
+      ? tx.writeDate
+      : milestone?.actualDatetime ?? tx.completedTime ?? tx.backloadConsolidation?.consolidatedDatetime;
+} else {
+  rawDateTime = milestone?.actualDatetime ?? tx.completedTime ?? tx.backloadConsolidation?.consolidatedDatetime ?? tx.writeDate;
+}
+
+
+  return separateDateTime(rawDateTime);
+}
+
+  
 
 
  @override
@@ -194,11 +185,7 @@ void initState() {
   @override
   Widget build(BuildContext context) {
      
-  final transaction = widget.transaction;
-
-    final scheduleMap = getPickupAndDeliverySchedule(transaction);
-
-     final delivery = scheduleMap['delivery'];
+  
     
     final acceptedTransaction = ref.watch(accepted_transaction.acceptedTransactionProvider);
 
@@ -297,41 +284,100 @@ void initState() {
                    
                     final authPartnerId = ref.watch(authNotifierProvider).partnerId;
                     final driverId = authPartnerId?.toString();
+                    final currentDriverName = ref.watch(authNotifierProvider).driverName?.toString() ?? '';
                  
                    
-                    final expandedTransactions = TransactionUtils.expandTransactions(
-                      transaction,
-                      driverId ?? '',
-                    );
+                     //  / Step 1: Expand all normal transactions for this driver
+                  final expandedTransactions = TransactionUtils.expandTransactions(
+                    transactionList, // your normal transactions list
+                    driverId ?? '',
+                  );
 
-                 
-                    final ongoingTransactions = expandedTransactions
-                      .where((tx) =>  ['Cancelled', 'Completed'].contains(tx.stageId) || ['Backload', 'Completed'].contains(tx.requestStatus) || tx.reassignment.any((e) => e.driverId.toString() == driverId)) // include removed
-                      .take(5)
-                      .toList()
-                      ..sort((a,b){
-                      DateTime getRecentDate(Transaction t) {
-                        final completed = DateTime.tryParse(t.completedTime ?? '');
-                        final cancelled = DateTime.tryParse(t.writeDate ?? '');
-                        final backload = DateTime.tryParse(t.backloadConsolidation?.consolidatedDatetime ?? '');
-                        
-                        return completed ?? backload ??cancelled ?? DateTime.fromMillisecondsSinceEpoch(0);
+                  // ✅ STEP 2: Collect ALL reassigned items from every transaction
+                  final allReassignments = transactionList
+                      .where((t) => t.reassigned != null && t.reassigned!.isNotEmpty)
+                      .expand((t) => t.reassigned!)
+                      .toList();
 
-                      }
-                      return getRecentDate(b).compareTo(getRecentDate(a));
-                    });
+                  // ✅ STEP 3: Expand them for the current driver
+                  final reassignedTransactions = TransactionUtils.expandReassignments(
+                    allReassignments,
+                    driverId ?? '',
+                    currentDriverName,
+                    transactionList, // pass all transactions for parent lookup
+                  );
 
-                    String getStatusLabel(Transaction item) {
-                      final status = item.requestStatus?.trim();
-                      final stage = item.stageId?.trim();
-                    
 
-                      if (status == 'Completed' || status == 'Backload') return status!;
-                      if (stage == 'Completed' || stage == 'Cancelled') return stage!;
-                      return '—';
+                  // Step 3: Merge normal + reassigned
+                  final allTransactions = [
+                    ...expandedTransactions,
+                    ...reassignedTransactions
+                  ];
+
+                  // Deduplicate by ID + request number
+                  final dedupedTransactions = <Transaction>[];
+                  for (final tx in allTransactions) {
+                    if (!dedupedTransactions.any((t) =>
+                        t.id == tx.id && t.requestNumber == tx.requestNumber)) {
+                      dedupedTransactions.add(tx);
+                    }
+                  }
+
+                  final recent5Transactions = dedupedTransactions
+                    .where((tx) {
+                      if (tx.isReassigned == true) return true; // always include reassigned
+                      return ['Cancelled', 'Completed'].contains(tx.stageId) ||
+                          ['Backload', 'Completed'].contains(tx.requestStatus);
+                    })
+                    .toList()
+                  ..sort((a, b) {
+                    DateTime getRecentDate(Transaction t) {
+                      final completed = DateTime.tryParse(t.completedTime ?? '');
+                      final cancelled = DateTime.tryParse(t.writeDate ?? '');
+                      final backload = DateTime.tryParse(t.backloadConsolidation?.consolidatedDatetime ?? '');
+                      final reassigned = (t.isReassigned == true && (t.reassigned?.isNotEmpty ?? false))
+                          ? DateTime.tryParse(t.reassigned!.first.createDate)
+                          : null;
+
+                      // prioritize reassignment first, then completed/backload/cancelled
+                      return reassigned ?? completed ?? backload ?? cancelled ?? DateTime.fromMillisecondsSinceEpoch(0);
                     }
 
-                    
+                    return getRecentDate(b).compareTo(getRecentDate(a)); // descending (most recent first)
+                  });
+
+                final ongoingTransactions = recent5Transactions.take(5).toList();
+
+
+                   
+                   
+                    String getStatusLabel(Transaction item, String currentDriverId, String currentDriverName) {
+  final status = item.requestStatus?.trim();
+  final stage = item.stageId?.trim();
+
+  final isReassigned = item.reassigned?.any(
+        (r) =>
+            (r.driverId.toString() == currentDriverId ||
+                r.driverName.toLowerCase().contains(currentDriverName.toLowerCase())) &&
+            r.requestNumber == item.requestNumber,
+      ) ??
+      false;
+
+  // If completed or cancelled, always show those first
+  if (status == 'Completed' || status == 'Backload') return status!;
+  if (stage == 'Completed' || stage == 'Cancelled') return stage!;
+
+  // Only show Reassigned if it's not completed/cancelled
+  if ((item.isReassigned == true || isReassigned) &&
+      status != 'Completed' &&
+      stage != 'Completed' &&
+      stage != 'Cancelled') {
+    return 'Reassigned';
+  }
+
+  return '—';
+}
+                           
 
              
                     if (ongoingTransactions.isEmpty) {
@@ -362,20 +408,11 @@ void initState() {
                       itemCount: ongoingTransactions.length,
                       itemBuilder: (context, index) {
                         final item = ongoingTransactions[index];
-                        final statusLabel = getStatusLabel(item);
+                        final statusLabel = getStatusLabel(item, driverId ?? '', currentDriverName);
 
-                        String getDisplayDate(Transaction item, MilestoneHistoryModel? delivery) {
-                          try {
-                            if (item.stageId == 'Cancelled') {
-                              return separateDateTime(item.writeDate)['date'] ?? '—';
-                            } else if (item.requestStatus == 'Completed') {
-                              return separateDateTime(item.completedTime)['date'] ?? '—';
-                            } else if (item.requestStatus == 'Backload') {
-                              return item.backloadConsolidation?.formattedConsolidatedDate ?? '—';
-                            }
-                          } catch (_) {}
-                          return '—';
-                        }
+                          final dateTimeMap = getCompletedTransactionDatetime(item);
+                        final displayDate = dateTimeMap['date']!;
+                        final displayTime = dateTimeMap['time']!;
 
                         return Container(
                           margin: const EdgeInsets.only(bottom: 20),
@@ -438,11 +475,7 @@ void initState() {
                                           crossAxisAlignment: CrossAxisAlignment.end,
                                           children: [
                                             Text(
-                                             (item.requestStatus == 'Completed' || item.requestStatus == 'Backload' || item.stageId == 'Completed')
-                                              ? item.requestStatus == 'Backload' ? 'Backloading' : 'Completed'
-                                              : item.stageId == 'Cancelled'
-                                                ? 'Cancelled'
-                                                : '—',
+                                             statusLabel,
                                               style: AppTextStyles.caption.copyWith(
                                                 color: Colors.white,
                                                 fontWeight: FontWeight.bold
@@ -480,8 +513,7 @@ void initState() {
                                           crossAxisAlignment: CrossAxisAlignment.end,
                                           children: [
                                             Text(
-                                             getDisplayDate(item, delivery),
-
+                                             displayDate,
                                               style: AppTextStyles.caption.copyWith(
                                                 color: mainColor,
                                                 fontWeight: FontWeight.bold,
@@ -515,14 +547,7 @@ void initState() {
                                           crossAxisAlignment: CrossAxisAlignment.end,
                                           children: [
                                             Text(
-                                              item.stageId == 'Cancelled'
-                                                ? separateDateTime(item.writeDate)['time'] ?? '—'
-                                                : item.requestStatus == 'Completed'
-                                                  ? separateDateTime(item.completedTime)['time'] ?? '—'
-                                                 : item.requestStatus == 'Backload'
-                                                    ? separateDateTime(item.backloadConsolidation?.consolidatedDatetime)['time'] ?? '—'
-
-                                                    : '—',
+                                              displayTime,
                                               style: AppTextStyles.caption.copyWith(
                                                 color: mainColor,
                                                 fontWeight: FontWeight.bold,

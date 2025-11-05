@@ -205,8 +205,8 @@ class _DetailedDetailState extends ConsumerState<DetailedDetailScreen> {
                                 Text(
                                 // (widget.transaction?.originAddress.isNotEmpty ?? false)
                                 // ? widget.transaction!.originAddress.toUpperCase() : '—',
-                                (widget.transaction?.origin.isNotEmpty ?? false)
-                                ? widget.transaction!.origin.toUpperCase() : '—',
+                                (widget.transaction?.origin!.isNotEmpty ?? false)
+                                ? widget.transaction!.origin!.toUpperCase() : '—',
                                   // Use the originPort variable here
                                   style: AppTextStyles.subtitle.copyWith(
                                     color: mainColor,

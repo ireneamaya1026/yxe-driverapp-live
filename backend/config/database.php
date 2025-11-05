@@ -116,7 +116,7 @@ return [
             'driver' => 'pgsql',
             'host' => env('ODOO_DB_HOST', '127.0.0.1'),
             'port' => env('ODOO_DB_PORT', '5432'),
-            'database' => env('ODOO_DB_DATABASE', 'https://rda_beta_new'),
+            'database' => env('ODOO_DB_DATABASE', 'https://yxe-odoo-yxe-live-production-18245399'),
             'username' => env('ODOO_DB_USERNAME', 'p_jralejandria_beta_dev_yxe_production_beta_22570487'),
             'password' => env('ODOO_DB_PASSWORD', 'jralejandria_yxecosystem_dev_main_18501431'),
             'charset' => 'utf8',

@@ -136,7 +136,7 @@ class _HistoryDetailState extends ConsumerState<HistoryDetailScreen> {
       MilestoneHistoryModel? deliverySchedule;
 
       if(pickupFcl != null) {
-        pickupSchedule = history.firstWhere(
+        pickupSchedule = history?.firstWhere(
           (h) => 
             h.fclCode.trim().toUpperCase() == pickupFcl.toUpperCase() &&
             h.dispatchId == dispatchId.toString() &&
@@ -151,11 +151,11 @@ class _HistoryDetailState extends ConsumerState<HistoryDetailScreen> {
             actualDatetime: '', isBackload: ''
           ),
         );
-        if(pickupSchedule.id == -1) pickupSchedule  = null;
+        if(pickupSchedule?.id == -1) pickupSchedule  = null;
       }
 
       if(deliveryFcl != null) {
-        deliverySchedule = history.firstWhere(
+        deliverySchedule = history?.firstWhere(
           (h) => 
             h.fclCode.trim().toUpperCase() == deliveryFcl.toUpperCase() &&
             h.dispatchId == dispatchId.toString() &&
@@ -170,7 +170,7 @@ class _HistoryDetailState extends ConsumerState<HistoryDetailScreen> {
             actualDatetime: '', isBackload: ''
           ),
         );
-        if(deliverySchedule.id == -1) deliverySchedule  = null;
+        if(deliverySchedule?.id == -1) deliverySchedule  = null;
       }
       return {
         'pickup': pickupSchedule,
@@ -314,32 +314,66 @@ class _HistoryDetailState extends ConsumerState<HistoryDetailScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // Space between label and value
-                              Text(
-                                (widget.transaction?.requestStatus == 'Completed' || widget.transaction?.stageId == 'Completed')
-                                  ? formatDateTime(delivery?.actualDatetime)
-                                  : widget.transaction?.stageId == 'Cancelled'
-                                    ? formatDateTime(widget.transaction?.writeDate)
-                                    : widget.transaction?.requestStatus == 'Backload' ? formatDateTime( widget.transaction?.backloadConsolidation?.consolidatedDatetime)
-                                    : '—',
-                                
-                                style: AppTextStyles.subtitle.copyWith(
-                                  color: Colors.white,
-                                ),
-                              ),
-                              Text(
-                               (widget.transaction?.requestStatus == 'Completed' || widget.transaction?.stageId == 'Completed')
-                                              ? 'Completed Date'
-                                              : widget.transaction?.stageId == 'Cancelled'
-                                                ? 'Cancelled Date' 
-                                                : widget.transaction?.requestStatus == 'Backload' ? 'Consolidated Date'
-                                                : '—',
-                                style: AppTextStyles.caption.copyWith(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
+      // 🕒 Display correct date depending on status
+      Text(
+        (() {
+          if (widget.transaction?.isReassigned == true &&
+              (widget.transaction?.reassigned?.isNotEmpty ?? false)) {
+            return formatDateTime(widget.transaction!.reassigned!.first.createDate);
+          } 
+          // ✅ Completed or stage completed
+          else if (widget.transaction?.requestStatus == 'Completed' ||
+              widget.transaction?.stageId == 'Completed') {
+            final completedDate = widget.transaction?.completedTime;
+            final deliveryActual = scheduleMap['delivery']?.actualDatetime;
+
+            if (completedDate != null && completedDate.isNotEmpty) {
+              return formatDateTime(completedDate);
+            } else if (deliveryActual != null && deliveryActual.isNotEmpty) {
+              // fallback to delivery actual datetime
+              return formatDateTime(deliveryActual);
+            } else {
+              return '—';
+            }
+          } 
+          // Cancelled
+          else if (widget.transaction?.stageId == 'Cancelled') {
+            return formatDateTime(widget.transaction?.writeDate);
+          } 
+          // Backload
+          else if (widget.transaction?.requestStatus == 'Backload') {
+            return formatDateTime(widget.transaction?.backloadConsolidation?.consolidatedDatetime);
+          } 
+          // Default
+          else {
+            return '—';
+          }
+        })(),
+        style: AppTextStyles.subtitle.copyWith(color: Colors.white),
+      ),
+      // 🏷 Label
+      Text(
+        (() {
+          if (widget.transaction?.isReassigned == true &&
+              (widget.transaction?.reassigned?.isNotEmpty ?? false)) {
+            return 'Reassigned Date';
+          } else if (widget.transaction?.requestStatus == 'Completed' ||
+              widget.transaction?.stageId == 'Completed') {
+            return 'Completed Date';
+          } else if (widget.transaction?.stageId == 'Cancelled') {
+            return 'Cancelled Date';
+          } else if (widget.transaction?.requestStatus == 'Backload') {
+            return 'Consolidated Date';
+          } else {
+            return '—';
+          }
+        })(),
+        style: AppTextStyles.caption.copyWith(
+          color: Colors.white,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    ],
                           ),
                         ),
                       ],
@@ -347,6 +381,18 @@ class _HistoryDetailState extends ConsumerState<HistoryDetailScreen> {
                   ],
                 ),
               ),  
+              (widget.transaction?.requestStatus == "Reassigned") ?
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                    child: Text(
+                      'This booking was reassigned to another driver.',
+                      style: AppTextStyles.subtitle,
+                      textAlign: TextAlign.center,
+                    ),
+                  )
+                )
+                : 
               (widget.transaction?.stageId == "Cancelled") ?
               Center(
                 child: Padding(
@@ -866,12 +912,13 @@ class _HistoryDetailState extends ConsumerState<HistoryDetailScreen> {
       );
     }
 
-    Widget _buildDownloadButton(String fileName, Uint8List bytes) {
+   Widget _buildDownloadButton(String fileName, Uint8List bytes) {
       return SizedBox(
         child: Padding(
         padding: const EdgeInsets.only(bottom: 8),
         child: TextButton.icon(
-              onPressed: () async {
+              onPressed: 
+              () async {
                 try {
                   if (Platform.isAndroid) {
                     int sdk = (await DeviceInfoPlugin().androidInfo).version.sdkInt;
@@ -894,58 +941,68 @@ class _HistoryDetailState extends ConsumerState<HistoryDetailScreen> {
                   if (!await dir.exists()) {
                     dir = await getExternalStorageDirectory() ?? dir;
                   }
+                  
+                  final ext = fileName.split('.').last;
+                  final baseName = fileName.replaceAll('.$ext', '');
+                  String uniqueFileName =  fileName;
 
-              final file = File('${dir.path}/$fileName');
-              await file.writeAsBytes(bytes);
-
-              if(context.mounted){
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      '✅ Downloaded: $fileName',
-                      style: AppTextStyles.caption.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w500,
+                  int counter = 1;
+                   while (File('${dir.path}/$uniqueFileName').existsSync()) {
+                    uniqueFileName = '$baseName($counter).$ext';
+                    counter++;
+                  }
+                  
+                  final file = File('${dir.path}/$uniqueFileName');
+                  await file.writeAsBytes(bytes);
+                  
+                  if(context.mounted){
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          '✅ Downloaded: $uniqueFileName',
+                          style: AppTextStyles.caption.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        duration: const Duration(seconds: 2),
+                        behavior: SnackBarBehavior.floating, // ✅ Makes it float with margin
+                        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        shape: RoundedRectangleBorder( // ✅ Rounded corners
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        backgroundColor: mainColor, // ✅ Soft black, not pure #000
+                        elevation: 6, // ✅ Soft shadow for depth
                       ),
-                    ),
-                    duration: const Duration(seconds: 2),
-                    behavior: SnackBarBehavior.floating, // ✅ Makes it float with margin
-                    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    shape: RoundedRectangleBorder( // ✅ Rounded corners
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    backgroundColor: mainColor, // ✅ Soft black, not pure #000
-                    elevation: 6, // ✅ Soft shadow for depth
-                  ),
-                );
-              }
+                    );
+                  }
 
-              print('✅ File saved: ${file.path}');
-            } catch (e) {
-              print('❌ Save failed: $e');
-              if(context.mounted){
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      '❌ Download failed: $fileName',
-                      style: AppTextStyles.caption.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w500,
+                  print('✅ File saved: ${file.path}');
+                } catch (e) {
+                  print('❌ Save failed: $e');
+                  if(context.mounted){
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          '❌ Download failed: $fileName',
+                          style: AppTextStyles.caption.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        duration: const Duration(seconds: 2),
+                        behavior: SnackBarBehavior.floating, // ✅ Makes it float with margin
+                        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        shape: RoundedRectangleBorder( // ✅ Rounded corners
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        backgroundColor: Colors.red, // ✅ Soft black, not pure #000
+                        elevation: 6, // ✅ Soft shadow for depth
                       ),
-                    ),
-                    duration: const Duration(seconds: 2),
-                    behavior: SnackBarBehavior.floating, // ✅ Makes it float with margin
-                    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    shape: RoundedRectangleBorder( // ✅ Rounded corners
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    backgroundColor: Colors.red, // ✅ Soft black, not pure #000
-                    elevation: 6, // ✅ Soft shadow for depth
-                  ),
-                );
-              }
-            }
-                  },
+                    );
+                  }
+                }
+              },
               icon: const Icon(Icons.download),
               label:Text(
                 'Download $fileName',
@@ -959,6 +1016,8 @@ class _HistoryDetailState extends ConsumerState<HistoryDetailScreen> {
       
       );
     }
+
+
 
 
   Widget  _buildFreightTab(){
@@ -1024,8 +1083,8 @@ class _HistoryDetailState extends ConsumerState<HistoryDetailScreen> {
                   ),
                 ),
                 Text(
-                  (widget.transaction?.origin.isNotEmpty ?? false)
-                  ? widget.transaction!.origin : '—',
+                  (widget.transaction?.origin?.isNotEmpty ?? false)
+                  ? widget.transaction!.origin! : '—',
                   style: AppTextStyles.body.copyWith(
                     color: Colors.black,
                   ),

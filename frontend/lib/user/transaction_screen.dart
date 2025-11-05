@@ -229,8 +229,8 @@ class _TransactionScreenState extends ConsumerState<TransactionScreen> {
 
 
                     expandedTransactions.sort((a,b){
-            DateTime dateA = DateTime.tryParse(a.deliveryDate) ?? DateTime(0);
-            DateTime dateB = DateTime.tryParse(b.deliveryDate) ?? DateTime(0);
+            DateTime dateA = DateTime.tryParse(a.deliveryDate!) ?? DateTime(0);
+            DateTime dateB = DateTime.tryParse(b.deliveryDate!) ?? DateTime(0);
             return dateB.compareTo(dateA);
           });
                     
