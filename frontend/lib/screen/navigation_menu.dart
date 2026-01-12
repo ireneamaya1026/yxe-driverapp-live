@@ -5,13 +5,15 @@ import 'package:frontend/notifiers/navigation_notifier.dart';
 import 'package:frontend/theme/colors.dart';
 
 class NavigationMenu extends ConsumerWidget {
-  const NavigationMenu({super.key});
+  final Future<void> Function(int index)? onItemTap; // ✅ Custom callback for menu taps
+
+  const NavigationMenu({super.key, this.onItemTap});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final index = ref.watch(navigationNotifierProvider);
 
-    return Container (
+    return Container(
       decoration: const BoxDecoration(
         border: Border(
           top: BorderSide(
@@ -20,12 +22,12 @@ class NavigationMenu extends ConsumerWidget {
           ),
         ),
       ),
-      child: Theme (
-        data:Theme.of(context).copyWith(
+      child: Theme(
+        data: Theme.of(context).copyWith(
           navigationBarTheme: NavigationBarThemeData(
             indicatorColor: mainColor,
             iconTheme: WidgetStateProperty.resolveWith<IconThemeData>((states) {
-              if(states.contains(WidgetState.selected)) {
+              if (states.contains(WidgetState.selected)) {
                 return const IconThemeData(
                   color: Colors.white,
                   size: 30,
@@ -40,22 +42,16 @@ class NavigationMenu extends ConsumerWidget {
         ),
         child: NavigationBar(
           selectedIndex: index,
-          onDestinationSelected: (value) {
+          onDestinationSelected: (value) async {
+            // Update the selected index in Riverpod
             ref.read(navigationNotifierProvider.notifier).setSelectedIndex(value);
-             // Add navigation logic here
-            switch (value) {
-              case 0:
-                ref.read(navigationNotifierProvider.notifier).setSelectedIndex(0); // history tab
-                Navigator.of(context).popUntil((route) => route.isFirst); // go back to main/root
-                break;
-              case 1:
-                ref.read(navigationNotifierProvider.notifier).setSelectedIndex(1); // history tab
-                Navigator.of(context).popUntil((route) => route.isFirst); // go back to main/root
-                break;
-              case 2:
-                ref.read(navigationNotifierProvider.notifier).setSelectedIndex(2); // history tab
-                Navigator.of(context).popUntil((route) => route.isFirst); // go back to main/root
-              break;
+
+            // If a custom callback is provided, call it
+            if (onItemTap != null) {
+              await onItemTap!(value);
+            } else {
+              // Default navigation behavior
+              Navigator.of(context).popUntil((route) => route.isFirst);
             }
           },
           destinations: const [
@@ -74,11 +70,6 @@ class NavigationMenu extends ConsumerWidget {
               icon: Icon(Icons.history_outlined),
               label: '',
             ),
-            // NavigationDestination(
-            //   selectedIcon: Icon(Icons.person),
-            //   icon: Icon(Icons.person_outline),
-            //   label: 'Account',
-            // ),
           ],
         ),
       ),

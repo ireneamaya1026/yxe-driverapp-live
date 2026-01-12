@@ -19,10 +19,10 @@ use Carbon\Carbon;
 
 class TransactionController extends Controller
 {
-    protected $url = "https://rjramos147-yxe-driver-app-beta.odoo.com";
-    protected $db = 'rjramos147-yxe-driver-app-beta1-yxe-driverapp-beta-26086341';
+    protected $url = "https://jralejandria-alpha-dev-yxe.odoo.com";
+    protected $db = 'jralejandria-alpha-dev-yxe1-production-alpha-26901548';
     // protected $odoo_url = "http://192.168.76.205:8080/odoo/jsonrpc";
-    protected $odoo_url = "https://rjramos147-yxe-driver-app-beta.odoo.com/jsonrpc";
+    protected $odoo_url = "https://jralejandria-alpha-dev-yxe.odoo.com/jsonrpc";
 
    
    
@@ -355,7 +355,7 @@ class TransactionController extends Controller
                 "de_signature" => $signature,
                 "de_release_by" => $enteredName,
                 "de_completion_time" => $actualTime,
-                // "de_request_status" => $newStatus,
+                "de_request_status" => $newStatus,
             ];
 
             
@@ -373,7 +373,7 @@ class TransactionController extends Controller
                 "pl_receive_by" => $enteredName,
                 "stage_id" => 7,
                 "pl_completion_time" => $actualTime,
-                // "pl_request_status" => $newStatus,
+                "pl_request_status" => $newStatus,
                 "container_number" => $containerNumber,
                 
             ];
@@ -396,7 +396,7 @@ class TransactionController extends Controller
                 "de_release_by" => $enteredName,
                 "dl_completion_time" => $actualTime,
                 "stage_id" => 7,
-                // "dl_request_status" => $newStatus,
+                "dl_request_status" => $newStatus,
                 "container_number" => $containerNumber,
                 
             ];
@@ -454,7 +454,7 @@ class TransactionController extends Controller
                 "dl_signature" => $signature,
                 "de_release_by" => $enteredName,
                 "dl_completion_time" => $actualTime,
-                // "dl_request_status" => $newStatus,
+                "dl_request_status" => $newStatus,
                 "container_number" => $containerNumber,
                 "dl_hwb_signed" => $hwb_signed,
                 "dl_hwb_signed_filename" => $hwb_signed_filename,
@@ -486,7 +486,7 @@ class TransactionController extends Controller
                 "pl_receive_by" => $enteredName,
                 "stage_id" => 7,
                 "pe_completion_time" => $actualTime,
-                // "pe_request_status" => $newStatus,
+                "pe_request_status" => $newStatus,
                 "container_number" => $containerNumber
             ];
         }

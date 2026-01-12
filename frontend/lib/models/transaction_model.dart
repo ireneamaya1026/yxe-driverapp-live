@@ -255,7 +255,7 @@ class Transaction {
   factory Transaction.fromJson(Map<String, dynamic> json) {
     // print('knii Raw transaction JSON: $json');
     final rawConsolidation = json['backload_consolidation'];
-    print("this is raw origin: ${json['origin_port']}"); // Likely null or empty
+    // print("this is raw origin: ${json['origin_port']}"); // Likely null or empty
 
 
     return Transaction(

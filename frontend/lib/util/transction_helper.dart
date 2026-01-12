@@ -1,9 +1,4 @@
-import 'package:frontend/models/milestone_history_model.dart';
 import 'package:frontend/models/transaction_model.dart';
-
-import 'transaction_utils.dart'; // make sure you import your existing utils
-
-
 class TransactionHelpers {
   // /// Returns the expanded leg for the current driver, or the original transaction if none found
   // static Transaction getCurrentLeg(Transaction transaction, String driverId) {
@@ -67,7 +62,7 @@ class TransactionHelpers {
 
   static String newName(Transaction item) {
     return item.landTransport == 'transport'
-        ? 'Deliver to Consignee'
+        ? 'Deliver Laden'
         : 'Pickup Laden';
   }
 
@@ -94,8 +89,6 @@ class TransactionHelpers {
             reassigned: item.reassigned,
             rawOrigin: item.rawOrigin,
   rawDestination: item.rawDestination,
-   stageId: item.stageId,
-  writeDate: item.writeDate
           ),
         if (item.plTruckDriverName == driverId)
           item.copyWith(
@@ -112,8 +105,6 @@ class TransactionHelpers {
             reassigned: item.reassigned,
             rawOrigin: item.rawOrigin,
   rawDestination: item.rawDestination,
-   stageId: item.stageId,
-  writeDate: item.writeDate
           ),
       ];
     } else if (item.dispatchType == "dt") {
@@ -123,7 +114,7 @@ class TransactionHelpers {
       return [
         if (item.dlTruckDriverName == driverId)
           item.copyWith(
-            name: "Deliver to Consignee",
+            name: "Deliver Laden",
             origin: consigneeDestination,
             destination: consigneeOrigin,
             requestNumber: item.dlRequestNumber,
@@ -136,8 +127,6 @@ class TransactionHelpers {
             reassigned: item.reassigned,
             rawOrigin: item.rawOrigin,
   rawDestination: item.rawDestination,
-   stageId: item.stageId,
-  writeDate: item.writeDate
             
           ),
         if (item.peTruckDriverName == driverId)
@@ -155,8 +144,6 @@ class TransactionHelpers {
             reassigned: item.reassigned,
             rawOrigin: item.rawOrigin,
   rawDestination: item.rawDestination,
-   stageId: item.stageId,
-  writeDate: item.writeDate
           ),
       ];
     }

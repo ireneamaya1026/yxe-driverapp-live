@@ -945,8 +945,9 @@ Future<void> _fetchHistoryDetails() async {
                   
                   final file = File('${dir.path}/$uniqueFileName');
                   await file.writeAsBytes(bytes);
+                  if(!mounted) return;
                   
-                  if(context.mounted){
+                  // if(context.mounted){
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(
@@ -966,7 +967,7 @@ Future<void> _fetchHistoryDetails() async {
                         elevation: 6, // ✅ Soft shadow for depth
                       ),
                     );
-                  }
+                  
 
                   print('✅ File saved: ${file.path}');
                 } catch (e) {

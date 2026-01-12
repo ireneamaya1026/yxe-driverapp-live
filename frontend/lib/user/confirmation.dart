@@ -28,7 +28,7 @@ class ConfirmationScreen extends ConsumerStatefulWidget {
   final String uid;
   final Transaction? transaction;
 
-  const ConfirmationScreen({super.key, required this.uid, required this.transaction, required relatedFF, required requestNumber});
+  const ConfirmationScreen({super.key, required this.uid, required this.transaction, required relatedFF, required requestNumber, required int id});
 
   @override
   ConsumerState<ConfirmationScreen> createState() => _ConfirmationState();
@@ -279,7 +279,11 @@ List<String> getUploadLimit(){
    
 
    
-    return Scaffold(
+    return WillPopScope(
+  onWillPop: () async {
+    return await _showConfirmationDialog(context);
+  },
+  child: Scaffold(
       appBar: AppBar(
         iconTheme: const IconThemeData(color: mainColor),
       ),
@@ -607,12 +611,30 @@ List<String> getUploadLimit(){
             )
             
           ),
-          const NavigationMenu(),
+          NavigationMenu(
+            onItemTap: (index) async {
+              // Intercept menu taps
+              final shouldLeave = await _showConfirmationDialog(context);
+              if (shouldLeave) {
+                switch (index) {
+                  case 0:
+                    Navigator.of(context).popUntil((route) => route.isFirst);
+                    break;
+                  case 1:
+                    Navigator.of(context).popUntil((route) => route.isFirst);
+                    break;
+                  case 2:
+                    Navigator.of(context).popUntil((route) => route.isFirst);
+                    break;
+                }
+              }
+            },
+          ),
         ],
       )
       
    
-      // bottomNavigationBar: const NavigationMenu(),
+   ) // bottomNavigationBar: const NavigationMenu(),
     );
   }
 
@@ -703,4 +725,69 @@ class UploadImage {
   final String label;
 
   UploadImage({required this.file, required this.label});
+}
+
+Future<bool> _showConfirmationDialog(BuildContext context) async {
+   final shouldLeave = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title:  Text(
+            "Are you sure?",
+            style: AppTextStyles.title.copyWith(
+              color: mainColor,
+              fontWeight: FontWeight.bold,
+            ),
+            textAlign: TextAlign.center,
+          ),
+
+          content: Text(
+            "Leaving now will discard any changes you made.",
+            textAlign: TextAlign.center,
+            style: AppTextStyles.subtitle.copyWith(
+              color: Colors.black87
+            ),
+          ),
+
+          actions: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                Expanded (
+                  child: Padding (
+                    padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: mainColor,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      onPressed: () => Navigator.of(context).pop(false),
+                      child: Text("Stay", style: AppTextStyles.body.copyWith(color: Colors.white)),
+                    ),
+                  )
+                ),
+                Expanded (
+                  child: Padding (
+                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      onPressed: () => Navigator.of(context).pop(true),
+                      child: Text("Leave", style: AppTextStyles.body.copyWith(color: Colors.white)),
+                    ),
+                  )
+                )
+              ],
+            ),
+          ],
+        );
+      },
+    );
+    return shouldLeave ?? false; // return true if user confirms leave
 }

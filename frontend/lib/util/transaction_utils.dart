@@ -362,7 +362,7 @@ if (transaction.deTruckDriverName?.trim() == driverId.trim() &&
     transaction.peRequestNumber == requestNumber) {
   matchingLeg = 'pe';
 }
-print("Matching Leg: $matchingLeg request Number: $requestNumber");
+// print("Matching Leg: $matchingLeg request Number: $requestNumber");
 
   if (matchingLeg == null) {
     return {'pickup': null, 'delivery': null};
@@ -407,7 +407,7 @@ print("Matching Leg: $matchingLeg request Number: $requestNumber");
 
   final fclMap = fclPrefixes[dispatchType]?[transportMode]?[serviceType]?[matchingLeg];
 
-  print("FCL Map: $fclMap");
+  // print("FCL Map: $fclMap");
   if (fclMap == null) {
     return {'pickup': null, 'delivery': null};
   }

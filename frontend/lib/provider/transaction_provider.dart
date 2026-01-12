@@ -14,6 +14,7 @@ import 'package:frontend/notifiers/paginated_state.dart';
 import 'package:frontend/notifiers/transaction_notifier.dart';
 import 'package:frontend/provider/accepted_transaction.dart' as accepted_transaction;
 import 'package:frontend/provider/base_url_provider.dart';
+import 'package:frontend/provider/hive_offline_provider.dart';
 import 'package:frontend/provider/reject_provider.dart';
 import 'package:frontend/provider/transaction_list_notifier.dart';
 import 'package:frontend/user/map_api.dart';
@@ -336,6 +337,10 @@ final combinedTransactionProvider = FutureProvider<List<Transaction>>((ref) asyn
 
 final completedFFsProvider = StateNotifierProvider<CompletedFFsNotifier, Map<String, Transaction>>((ref) {
   return CompletedFFsNotifier();
+});
+
+final pendingPodUploaderProvider = Provider<PendingPodUploader>((ref) {
+  return PendingPodUploader();
 });
 class CompletedFFsNotifier extends StateNotifier<Map<String, Transaction>> {
   CompletedFFsNotifier() : super({});

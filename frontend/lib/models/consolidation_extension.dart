@@ -15,7 +15,7 @@ Map< String, String> separateDateTime(String? dateTime) {
         "time": DateFormat('hh:mm a').format(datetime),
       };
     } catch (e) {
-      print("Error parsing date: $e");
+      // print("Error parsing date: $e");
       return {"date": "N/A", "time": "N/A"}; // Return default values on error
     }
   }

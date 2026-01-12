@@ -834,7 +834,7 @@ Future<void> _fetchTransactionDetails() async {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => ConfirmationScreen(uid: widget.uid, transaction:leg, relatedFF:relatedFF, requestNumber: leg!.requestNumber,),
+                              builder: (context) => ConfirmationScreen(uid: widget.uid, transaction:leg, relatedFF:relatedFF, requestNumber: leg!.requestNumber, id: widget.transaction?.id ?? 0,),
                             ),
                           );
                         }else {

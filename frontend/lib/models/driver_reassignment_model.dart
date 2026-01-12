@@ -7,7 +7,6 @@ class DriverReassignment {
   final String dispatchName;
   final String createDate;
   final String requestType;
-  final String status;
 
   DriverReassignment({
     required this.id,
@@ -18,7 +17,6 @@ class DriverReassignment {
     required this.requestNumber,
     required this.createDate,
     required this.requestType,
-    required this.status,
   });
 
   factory DriverReassignment.fromJson(Map<String, dynamic> json) {
@@ -47,8 +45,7 @@ class DriverReassignment {
       requestNumber: json['request_no']?.toString() ?? '',
       createDate: json['create_date']?.toString() ?? '',
       requestType: json['request_type']?.toString() ?? '',
-      status: json['status']?.toString() ?? ''
-,    );
+    );
 }
 
 

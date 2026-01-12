@@ -21,6 +21,7 @@ import 'package:frontend/theme/text_styles.dart';
 import 'package:frontend/user/history_details.dart';
 import 'package:frontend/user/transaction_details.dart';
 import 'package:frontend/util/transaction_utils.dart';
+import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 
 class AllHistoryScreen extends ConsumerStatefulWidget{
@@ -145,9 +146,22 @@ void initState() {
       }
     });
 }
+Future<bool> hasInternetConnection() async {
+    try {
+      final response = await http.get(Uri.parse("https://www.google.com"));
+      return response.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+}
 
   Future<void> _refreshTransaction() async {
     print("Refreshing transactions");
+    final hasInternet = await hasInternetConnection();
+    if(!hasInternet){
+      print("disabled refresh");
+      return;
+    }
     try {
       ref.invalidate(allHistoryProvider);
       setState(() {
@@ -202,7 +216,7 @@ void initState() {
 
   //    final delivery = scheduleMap['delivery'];
     
-    final acceptedTransaction = ref.watch(accepted_transaction.acceptedTransactionProvider);
+    // final acceptedTransaction = ref.watch(accepted_transaction.acceptedTransactionProvider);
 
     
 
@@ -251,13 +265,13 @@ void initState() {
 
 
                     // If acceptedTransaction is a list, convert it to a Set of IDs for faster lookup
-                    final acceptedTransactionIds = acceptedTransaction;
+                    // final acceptedTransactionIds = acceptedTransaction;
 
                     // Filtered list excluding transactions with IDs in acceptedTransaction
-                    final transaction = transactionList.where((t) {
-                      final key = "${t.id}-${t.requestNumber}";
-                        return !acceptedTransactionIds.contains(key);
-                    }).toList();
+                    // final transaction = transactionList.where((t) {
+                    //   final key = "${t.id}-${t.requestNumber}";
+                    //     return !acceptedTransactionIds.contains(key);
+                    // }).toList();
 
                    
                     final authPartnerId = ref.watch(authNotifierProvider).partnerId;
