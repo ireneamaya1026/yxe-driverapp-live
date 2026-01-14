@@ -14,6 +14,7 @@ use Ripcord\Ripcord;
 use Illuminate\Support\Facades\Http;
 use GuzzleHttp\Guzzle;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Cache;
 
 
 
@@ -32,15 +33,7 @@ class FetchDataController extends Controller
         $uid = $request->query('uid') ;
         $login = $request->header('login'); 
         $odooPassword = $request->header('password');
-        Log::info('🔐 Login request', [
-            'uid' => $request->query('uid'),
-            'headers' => [
-                'login' => $request->header('login'),
-                'password' => $request->header('password'), // ⚠️ don't log in production
-            ],
-            'body' => $request->all(), // This shows form or JSON body content
-        ]);
-        
+     
         Log::info("Login is {$login}, UID is {$uid}, Password is {$odooPassword}");
         
         if (!$uid) {
@@ -142,7 +135,7 @@ class FetchDataController extends Controller
         ];
     }
 
-    private function processDispatchManagers(array $domain, string $partnerId, bool $filterByDriver = true): array
+    private function processDispatchManagers(array $domain, array $fields, array $fieldsToString, string $partnerId, bool $filterByDriver = true): array
     {
         $odooUrl = "{$this->url}/jsonrpc";
         $jobUrl = "{$this->url}/job_dispatcher/queue_job";
@@ -309,7 +302,11 @@ class FetchDataController extends Controller
                     'method' => 'execute_kw',
                     'args' => [$db, $uid, $password, 'consol.type.notebook', 'search_read',
                         [['|', ['consol_origin', '=', $manager['id']], ['consol_destination', '=', $manager['id']]]],
-                        ['fields' => ['id', 'consolidation_id','consol_origin', 'consol_destination','type_consol']]
+                        [
+                            'fields' => ['id', 'consolidation_id', 'consol_origin','consol_destination','type_consol'],
+                            'order' => 'id desc',  // <--- get latest row first
+                            'limit' => 1           // <--- only fetch the latest row
+                        ]
                     ]
                 ],
                 'id' => rand(1000, 9999)
@@ -625,65 +622,94 @@ class FetchDataController extends Controller
         $partnerId = $user['partner_id'];
         $partnerName = $user['partner_name'];
 
-        $today = date('Y-m-d');
-        $tomorrow = date('Y-m-d', strtotime('+1 day'));
+        // 🧠 Cache key unique per driver & per date
+        // $cacheKey = "today_booking_driver_{$partnerId}_" . date('Y-m-d');
 
+        // // Cache for 10 minutes (you can tweak this)
+        // $ttl = now()->addMinutes(1);
 
-         $domain = [
-            "&",  // AND all of the following
-                // ["dispatch_type", "!=", "ff"],
+        // $data = Cache::remember($cacheKey, $ttl, function () use ($partnerId, $partnerName) {
+            // Your existing Odoo fetching logic here
+            $today = date('Y-m-d');
+            $tomorrow = date('Y-m-d', strtotime('+1 day'));
 
-                "|",  // OR: date range match
-                    "&", 
-                        [ "pickup_date", ">=", $today ],
-                        [ "pickup_date", "<=", $tomorrow ],
-                    "&", 
-                        [ "delivery_date", ">=", $today ],
-                        [ "delivery_date", "<=", $tomorrow ],
-
-                "|", "|", "|",  // OR: driver match
+            $domain = [
+                "|",  // AND all of the following
+                    // ["dispatch_type", "!=", "ff"],
+    
+                    "|",  // OR: date range match
+                        "&", 
+                            [ "pickup_date", ">=", $today ],
+                            [ "pickup_date", "<=", $tomorrow ],
+                        "&", 
+                            [ "delivery_date", ">=", $today ],
+                            [ "delivery_date", "<=", $tomorrow ],
+    
+                    "|", "|", "|",  // OR: driver match
                     ["de_truck_driver_name", "=", $partnerId],
                     ["dl_truck_driver_name", "=", $partnerId],
                     ["pe_truck_driver_name", "=", $partnerId],
                     ["pl_truck_driver_name", "=", $partnerId],
-                
-        ];
-
-        
-        $driverData = $this->processDispatchManagers($domain, $partnerName);
-
-        // 🔹 Step 2: collect booking refs from driverData
-        $bookingRefs = collect($driverData)
-            ->pluck('booking_reference_no') // ⚠️ ensure this matches Odoo field
-            ->filter()
-            ->unique()
-            ->toArray();
-
-        // \Log::info("Booking Refs collected:", $bookingRefs);
-
-        // 🔹 Step 3: fetch FF by those booking refs
-        $ffData = [];
-        if (!empty($bookingRefs)) {
-            $ffDomain = [
-                ["dispatch_type", "ilike", "ff"], // case-insensitive match
-                ["booking_reference_no", "in", array_values($bookingRefs)],
+                    
             ];
-            // \Log::info("FF Domain:", $ffDomain);
 
-            $ffData = $this->processDispatchManagers($ffDomain, $partnerName, false);
-            // \Log::info("FF Data fetched:", $ffData);
-        }
+             $fields = [
+                "id", "de_request_status", "pl_request_status", "dl_request_status", "pe_request_status",
+                "dispatch_type", "de_truck_driver_name", "dl_truck_driver_name", "pe_truck_driver_name", "pl_truck_driver_name",
+                "de_request_no", "pl_request_no", "dl_request_no", "pe_request_no", "origin_port_terminal_address", "destination_port_terminal_address", "arrival_date", "delivery_date",
+                "freight_booking_number", "booking_service", "stage_id",
+                
+                "pickup_date", "departure_date","container_number",
+                
+                "de_assignation_time", "pl_assignation_time", "dl_assignation_time", "pe_assignation_time", "name", 
+            ];
 
-        // 🔹 Step 4: merge driver + FF results
-        $data = array_merge($driverData, $ffData);
+            $fieldsToString =[
+                "de_request_status", "pl_request_status", "dl_request_status", "pe_request_status",
+                "dispatch_type", 
+                "de_request_no", "pl_request_no", "dl_request_no", "pe_request_no", "origin_port_terminal_address", "destination_port_terminal_address", "arrival_date", "delivery_date",
+                "freight_booking_number", "stage_id",
+            
+                "pickup_date", "departure_date","container_number",
+            
+                "de_assignation_time", "pl_assignation_time", "dl_assignation_time", "pe_assignation_time", 
+            ];
 
+            $driverData = $this->processDispatchManagers($domain, $fields, $fieldsToString, $partnerName);
 
-        // ✅ Final return
-        return response()->json([
-            'data' => [
-                'transactions' => $data
-            ]
-        ]);
+            $bookingRefs = collect($driverData)
+                ->pluck('booking_reference_no')
+                ->filter()
+                ->unique()
+                ->toArray();
+
+            $ffData = [];
+            if (!empty($bookingRefs)) {
+                $ffDomain = [
+                    ["dispatch_type", "ilike", "ff"],
+                    ["booking_reference_no", "in", array_values($bookingRefs)],
+                ];
+                $ffData = $this->processDispatchManagers($ffDomain, $fields, $fieldsToString, $partnerName, false);
+            }
+
+            $data = array_merge($driverData, $ffData);
+            foreach ($data as &$row) {
+                foreach ([
+                    'pickup_date',
+                    'delivery_date',
+                ] as $field) {
+    
+                    if (!empty($row[$field])) {
+                        $row[$field] = date('Y-m-d H:i:s', strtotime($row[$field] . ' +8 hours'));
+                    }
+                }
+            }
+            unset($row);
+
+            // return array_merge($driverData, $ffData);
+        // });
+
+        return response()->json(['data' => ['transactions' => $data]]);
     }
 
     public function getOngoingBooking(Request $request)
@@ -704,25 +730,44 @@ class FetchDataController extends Controller
         $limit = (int) request()->query('limit', 10);
         $offset = ($page - 1) * $limit;
 
-        $today = date('Y-m-d');
-        $tomorrow = date('Y-m-d', strtotime('+1 day'));
+       
         // Step 4: Find all dispatch.manager records where driver name matches
         $domain =[
             "&",  // AND all of the following
-                "|", "|", "|", // OR: status is "Ongoing" in any leg
-                    ["de_request_status", "=", "Ongoing"],
-                    ["pl_request_status", "=", "Ongoing"],
-                    ["dl_request_status", "=", "Ongoing"],
-                    ["pe_request_status", "=", "Ongoing"],
+            "|", "|", "|", // OR: status is "Ongoing" in any leg
+            ["de_request_status", "=", "Ongoing"],
+            ["pl_request_status", "=", "Ongoing"],
+            ["dl_request_status", "=", "Ongoing"],
+            ["pe_request_status", "=", "Ongoing"],
 
-                "|", "|", "|",  // OR: driver match
-                    ["de_truck_driver_name", "=", $partnerId],
-                    ["dl_truck_driver_name", "=", $partnerId],
-                    ["pe_truck_driver_name", "=", $partnerId],
-                    ["pl_truck_driver_name", "=", $partnerId]
+            "|", "|", "|",  // OR: driver match
+            ["de_truck_driver_name", "=", $partnerId],
+            ["dl_truck_driver_name", "=", $partnerId],
+            ["pe_truck_driver_name", "=", $partnerId],
+            ["pl_truck_driver_name", "=", $partnerId]
         ];
 
-        $data = $this->processDispatchManagers($domain,  $partnerName);
+        $fields = [
+            "id", "de_request_status", "pl_request_status", "dl_request_status", "pe_request_status",
+            "dispatch_type", "de_truck_driver_name", "dl_truck_driver_name", "pe_truck_driver_name", "pl_truck_driver_name",
+            "de_request_no", "pl_request_no", "dl_request_no", "pe_request_no", "booking_reference_no", "freight_booking_number",
+            "freight_bl_number","name", "origin_port_terminal_address","dl_truck_plate_no", "pe_truck_plate_no", "de_truck_plate_no", "pl_truck_plate_no",
+           "delivery_date", "pickup_date","service_type","container_number",
+            "shipper_province","shipper_city","shipper_barangay","shipper_street", 
+            "consignee_province","consignee_city","consignee_barangay","consignee_street", "destination","origin"
+        ];
+
+        $fieldsToString =[
+            "de_request_status", "pl_request_status", "dl_request_status", "pe_request_status",
+            "dispatch_type", "service_type","container_number",
+            "de_request_no", "pl_request_no", "dl_request_no", "pe_request_no", "booking_reference_no", "freight_booking_number",
+            "freight_bl_number","name","origin_port_terminal_address","dl_truck_plate_no", "pe_truck_plate_no", "de_truck_plate_no", "pl_truck_plate_no",
+            "de_assignation_time", "pl_assignation_time", "dl_assignation_time", "pe_assignation_time", "delivery_date", "pickup_date",
+            "shipper_province","shipper_city","shipper_barangay","shipper_street", 
+            "consignee_province","consignee_city","consignee_barangay","consignee_street", "destination","origin"
+        ];
+
+        $data = $this->processDispatchManagers($domain, $fields, $fieldsToString, $partnerName);
 
 
         // ✅ Final return
@@ -758,6 +803,9 @@ class FetchDataController extends Controller
         
 
         $domain = [
+            "&",
+                    ["transport_mode", "!=", 1],
+                    // ["service_type", "!=", 2],
             "&",  // AND all of the following
                 // Grouped ORs for Completed or Rejected
                 "|",
@@ -877,6 +925,8 @@ class FetchDataController extends Controller
         $tomorrow = date('Y-m-d', strtotime('+1 day'));
      
         $domain = [
+            "&",
+                ["transport_mode", "!=", 1],
             "&",  // AND all of the following
                 // Grouped ORs for Completed or Rejected
                 "|",
@@ -890,13 +940,13 @@ class FetchDataController extends Controller
                             ["pe_request_status", "=", "Completed"],
 
                 "|",
-                        // Group 1: Completed statuses
-                        "|", 
-                            ["de_request_status", "=", "Backload"],
+                    // Group 1: Completed statuses
+                    "|", 
+                        ["de_request_status", "=", "Backload"],
+                        "|",
+                            ["pl_request_status", "=", "Backload"],
                             "|",
-                                ["pl_request_status", "=", "Backload"],
-                                "|",
-                                    ["dl_request_status", "=", "Backload"],
+                                ["dl_request_status", "=", "Backload"],
                                 ["pe_request_status", "=", "Backload"],
 
                 // Group 2: Rejected statuses
@@ -1002,6 +1052,9 @@ class FetchDataController extends Controller
                 'transactions' => $data,
                 'reassigned' => $reassigned,
                 
+                'transactions' => $data,
+                'reassigned' => $reassigned,
+                
             ]
         ]);
     }
@@ -1009,96 +1062,133 @@ class FetchDataController extends Controller
 
     public function getAllBooking(Request $request)
     {
-        $url = $this->url;
-        $db = $this->db;
-      
         $user = $this->authenticateDriver($request);
         if(!is_array($user)) return $user;
 
+       $partnerId = $user['partner_id'];
         $odooUrl = $this->odoo_url;  
-
-        $uid = $user['uid'];
-        $odooPassword = $request->header('password');
-        $partnerId = $user['partner_id'];
+        $url = $this->url;
+        $db = $this->db;
+       
         $partnerName = $user['partner_name'];
+       
 
         $today = date('Y-m-d');
-
-        $page = (int) request()->query('page', 1);
-        $limit = (int) request()->query('limit', 5);
-        $offset = ($page - 1) * $limit;
-
-        // Step 5: Queue a job for each dispatch.manager record
-        $domain =[
-            "|", "|", "|", // OR: driver match
-            ["de_truck_driver_name", "=", $partnerId],
-            ["dl_truck_driver_name", "=", $partnerId],
-            ["pe_truck_driver_name", "=", $partnerId],
-            ["pl_truck_driver_name", "=", $partnerId],
-            // "|",
-            // ['pickup_date', ">=", $today],
-            // ['delivery_date', ">=", $today],
-           
-            // ["dispatch_type", "=", "ff"]
-
-        ];
-        $countRes = jsonRpcRequest($odooUrl, [
-            'jsonrpc' => '2.0',
-            'method' => 'call',
-            'params' => [
-                'service' => 'object',
-                'method' => 'execute_kw',
-                'args' => [
-                    $db,
-                    $uid,
-                    $odooPassword,
-                    'dispatch.manager',
-                    'search_count',
-                    [$domain]
-                ]
-            ],
-            'id' => rand(1000, 9999)
-        ]);
-
-        $total = $countRes['result'] ?? 0;
-        $lastPage = (int) ceil($total / $limit);
-
-
+        $partnerId = $user['partner_id'];
         
-        $driverData = $this->processDispatchManagers($domain, $partnerName);
+        // $cacheKey = "today_booking_driver_{$partnerId}_{$today}";
 
-        // 🔹 Step 2: collect booking refs from driverData
-        $bookingRefs = collect($driverData)
-            ->pluck('booking_reference_no') // ⚠️ ensure this matches Odoo field
-            ->filter()
-            ->unique()
-            ->toArray();
+       
+        // $data = Cache::remember($cacheKey, now()->addMinutes(1), function () use ($user, $request, $partnerId, $partnerName) {
+        //     \Log::info("Cache MISS: fetching fresh Odoo data for driver {$partnerName}");
+            $odooUrl = $this->odoo_url;  
+            $db = $this->db;
+            $uid = $user['uid'];
+            $odooPassword = $request->header('password');
 
-        // \Log::info("Booking Refs collected:", $bookingRefs);
+            $page = (int) request()->query('page', 1);
+            $limit = (int) request()->query('limit', 5);
+            $offset = ($page - 1) * $limit;
 
-        // 🔹 Step 3: fetch FF by those booking refs
-        $ffData = [];
-        if (!empty($bookingRefs)) {
-            $ffDomain = [
-                ["dispatch_type", "ilike", "ff"], // case-insensitive match
-                ["booking_reference_no", "in", array_values($bookingRefs)],
+            $domain = [
+                
+                    "|", "|", "|", // OR: driver match
+                    ["de_truck_driver_name", "=", $partnerId],
+                    ["dl_truck_driver_name", "=", $partnerId],
+                    ["pe_truck_driver_name", "=", $partnerId],
+                    ["pl_truck_driver_name", "=", $partnerId],
+                   
+                    // "&",
+                    // ["transport_mode", "!=", 1],
+                    // ["service_type", "!=", 2],
             ];
-            // \Log::info("FF Domain:", $ffDomain);
+                        
+            $fields = [
+                "id", "de_request_status", "pl_request_status", "dl_request_status", "pe_request_status", "dispatch_type", "de_truck_driver_name", 
+                "dl_truck_driver_name", "pe_truck_driver_name", "pl_truck_driver_name", "de_request_no", "pl_request_no", "dl_request_no", "pe_request_no", 
+                "delivery_date", "freight_booking_number", "pickup_date",  "de_assignation_time", "pl_assignation_time", "dl_assignation_time", 
+                "pe_assignation_time", "name", "transport_mode", "service_type", "booking_service","stage_id","container_number",
+            ];
 
-            $ffData = $this->processDispatchManagers($ffDomain, $partnerName, false);
-            // \Log::info("FF Data fetched:", $ffData);
-        }
+            $fieldsToString =[
+                "de_request_status", "pl_request_status", "dl_request_status", "pe_request_status", "dispatch_type", "de_request_no", "pl_request_no", 
+                "dl_request_no", "pe_request_no",  "delivery_date", "freight_booking_number", "pickup_date",  "de_assignation_time", "pl_assignation_time", 
+                "dl_assignation_time", "pe_assignation_time", "stage_id","container_number",
+            ];
+            
 
-        // 🔹 Step 4: merge driver + FF results
-        $data = array_merge($driverData, $ffData);
+            $countRes = jsonRpcRequest($odooUrl, [
+                'jsonrpc' => '2.0',
+                'method' => 'call',
+                'params' => [
+                    'service' => 'object',
+                    'method' => 'execute_kw',
+                    'args' => [
+                        $db,
+                        $uid,
+                        $odooPassword,
+                        'dispatch.manager',
+                        'search_count',
+                        [$domain]
+                    ]
+                ],
+                'id' => rand(1000, 9999)
+            ]);
+
+            $total = $countRes['result'] ?? 0;
+            $lastPage = (int) ceil($total / $limit);
+
+            $driverData = $this->processDispatchManagers($domain, $fields, $fieldsToString, $partnerName);
+
+            // 🔹 Step 2: collect booking refs from driverData
+            $bookingRefs = collect($driverData)
+                ->pluck('booking_reference_no') // ⚠️ ensure this matches Odoo field
+                ->filter()
+                ->unique()
+                ->toArray();
+
+            
+
+            // 🔹 Step 3: fetch FF by those booking refs
+            $ffData = [];
+            if (!empty($bookingRefs)) {
+                $ffDomain = [
+                    ["dispatch_type", "ilike", "ff"], // case-insensitive match
+                    ["booking_reference_no", "in", array_values($bookingRefs)],
+                ];
+                // \Log::info("FF Domain:", $ffDomain);
+
+                $ffData = $this->processDispatchManagers($ffDomain, $fields, $fieldsToString, $partnerName, false);
+                // \Log::info("FF Data fetched:", $ffData);
+            }
+
+            // 🔹 Step 4: merge driver + FF results
+            $data = array_merge($driverData, $ffData);
+
+            $sizeInBytes = strlen(json_encode($data));
+            $sizeInMB = round($sizeInBytes / 1024 / 1024, 3); // Convert bytes → MB (3 decimals)
+            \Log::info("Response size when cached for driver {$partnerName}: {$sizeInMB} MB");
+            if (empty($data)) {
+                \Log::warning("No data fetched for driver {$partnerName}, skipping cache.");
+                return []; // This avoids caching an empty dataset
+            }
+
+        //     return $data;
+        // });
+
+        // if (Cache::has($cacheKey)) {
+        //     \Log::info("Cache HIT for driver {$partnerName}");
+        // }
+
+        $sizeInBytes = strlen(json_encode($data));
+        $sizeInMB = round($sizeInBytes / 1024 / 1024, 3); // Convert bytes → MB (3 decimals)
+        \Log::info("Response size when no cached for driver {$partnerName}: {$sizeInMB} MB");
 
 
         // ✅ Final return
         return response()->json([
             'data' => [
-                'transactions' => $data,
-            'current_page' => $page,
-            'last_page' => $lastPage
+                'transactions' => $data
             ]
         ]);
     }

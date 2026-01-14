@@ -9,6 +9,12 @@ class TransactionListNotifier extends StateNotifier<List<Transaction>> {
     state = transactions;
   }
 
+  bool get hasData => state.isNotEmpty;
+
+  void clear(){
+    state = [];
+  }
+
 
   // Method to update a transaction’s status
   void updateTransactionStatus(int id, String newStatus) {
@@ -24,9 +30,9 @@ class TransactionListNotifier extends StateNotifier<List<Transaction>> {
 
 // Provider to use the TransactionListNotifier
 final transactionListProvider =
-    StateNotifierProvider<TransactionListNotifier, List<Transaction>>((ref) {
-  return TransactionListNotifier();
-});
+    StateNotifierProvider<TransactionListNotifier, List<Transaction>>(
+    (ref) => TransactionListNotifier(),
+);
 
 // Provider to get the list of pending transactions
 final pendingTransactionProvider = Provider<List<Transaction>>((ref) {
@@ -51,12 +57,12 @@ final rejectedTransactionProvider = Provider((ref) {
       .toSet();
 });
 
-final ongoingTransactionProvider = Provider((ref) {
-  final allTransactions = ref.watch(transactionListProvider);
-  return allTransactions
-      .where((transaction) => transaction.status == 'Ongoing')
-      .toSet();
-});
+// final ongoingTransactionProvider = Provider((ref) {
+//   final allTransactions = ref.watch(transactionListProvider);
+//   return allTransactions
+//       .where((transaction) => transaction.status == 'Ongoing')
+//       .toSet();
+// });
 
 final completedTransactionProvider = Provider((ref) {
   final allTransactions = ref.watch(transactionListProvider);
@@ -64,4 +70,20 @@ final completedTransactionProvider = Provider((ref) {
       .where((transaction) => transaction.status == 'Completed')
       .toSet();
 });
+
+final todayTransactionProvider =
+    StateNotifierProvider<TransactionListNotifier, List<Transaction>>(
+  (ref) => TransactionListNotifier(),
+);
+
+final ongoingTransactionProvider =
+    StateNotifierProvider<TransactionListNotifier, List<Transaction>>(
+  (ref) => TransactionListNotifier(),
+);
+
+final historyTransactionProvider =
+    StateNotifierProvider<TransactionListNotifier, List<Transaction>>(
+  (ref) => TransactionListNotifier(),
+);
+
 

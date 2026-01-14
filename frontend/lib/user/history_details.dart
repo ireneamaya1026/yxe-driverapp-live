@@ -11,6 +11,7 @@ import 'package:frontend/models/milestone_history_model.dart';
 import 'package:frontend/models/transaction_model.dart';
 import 'package:frontend/notifiers/auth_notifier.dart';
 import 'package:frontend/provider/accepted_transaction.dart' as accepted_transaction;
+import 'package:frontend/provider/base_url_provider.dart';
 import 'package:frontend/provider/theme_provider.dart';
 import 'package:frontend/provider/transaction_list_notifier.dart';
 import 'package:frontend/provider/transaction_provider.dart';
@@ -18,6 +19,7 @@ import 'package:frontend/screen/navigation_menu.dart';
 import 'package:frontend/theme/colors.dart';
 import 'package:frontend/theme/text_styles.dart';
 import 'package:frontend/user/schedule.dart';
+import 'package:frontend/util/transaction_utils.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
@@ -39,7 +41,9 @@ class HistoryDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _HistoryDetailState extends ConsumerState<HistoryDetailScreen> {
-  late String uid;
+ 
+  Transaction? transaction;
+  Transaction? leg;
 
   int? _expandedTabIndex;
 
@@ -57,163 +61,131 @@ class _HistoryDetailState extends ConsumerState<HistoryDetailScreen> {
   @override
   void initState() {
     super.initState();
-    uid = widget.uid; // Initialize uid
     _expandedTabIndex = 0; // Default to the first tab
+    _fetchHistoryDetails();
   }
+
+  bool isLoading = true;
+
+Future<void> _fetchHistoryDetails() async {
+  final uid = ref.read(authNotifierProvider).uid ?? '';
+
+  print("Fetching details for transaction ID: ${widget.transaction?.id}");
+  print("Request Number: ${widget.transaction?.requestNumber}");
+  print('➡️ TransactionDetails params: id=${widget.transaction?.id}, uid=$uid');
+
+  try {
+    final baseUrl = ref.read(baseUrlProvider);
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/odoo/booking/history_details/${widget.transaction?.id}?uid=$uid'),
+      headers: {
+        'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'password': ref.read(authNotifierProvider).password ?? '',
+          'login':ref.read(authNotifierProvider).login ?? ''
+      },
+    );
+
+  if (response.statusCode == 200) {
+      final jsonData = jsonDecode(response.body);
+
+      // check if structure is what you expect
+      final data = jsonData['data'];
+      final transactions = data?['transactions'];
+
+      if (transactions != null && transactions is List && transactions.isNotEmpty) {
+        final selected = transactions.firstWhere(
+          (tx) => tx['id'] == widget.transaction?.id,
+          orElse: () => transactions.first,
+        );
+
+        debugPrint('✅ Found transaction: ${selected['id']}');
+
+        setState(() {
+          transaction = Transaction.fromJson(selected);
+          isLoading = false;
+        });
+      } else {
+        debugPrint('⚠️ No transactions found in response.');
+        setState(() => isLoading = false);
+      }
+    } else {
+      debugPrint('❌ Failed request. Code: ${response.statusCode}');
+      setState(() => isLoading = false);
+    }
+  } catch (e) {
+    setState(() => isLoading = false);
+    debugPrint('Error fetching transaction: $e');
+  }
+  
+}
+
 
   String getNullableValue(String? value, {String fallback = ''}) {
     return value ?? fallback;
   }
-  Map<String, MilestoneHistoryModel?> getPickupAndDeliverySchedule(Transaction? transaction) {
-    final dispatchType = transaction!.dispatchType;
-    final history = transaction.history;
-    final serviceType = transaction.serviceType;
-    final dispatchId = transaction.id;
-    final requestNumber = transaction.requestNumber;
 
-    final fclPrefixes = {
-      'ot': {
-        'Full Container Load': {
-          'de': {
-            'delivery': 'TEOT',
-            'pickup': 'TYOT'
-          },
-          'pl': {
-            'delivery': 'CLOT',
-            'pickup': 'TLOT'
-          },
-        },
-        'Less-Than-Container Load': {
-          'pl': {
-            'delivery': 'LCLOT',
-            'pickup': 'LTEOT'
-          },
-        },
-      },
-      'dt': {
-        'Full Container Load': {
-          'dl': {
-            'delivery': 'CLDT',
-            'pickup': 'GYDT'
-          },
-          'pe': {
-            'delivery': 'CYDT',
-            'pickup': 'GLDT'
-          },
-        },
-        'Less-Than-Container Load': {
-          'pl': {
-            'delivery': 'LCLOT',
-            'pickup': 'LTEOT'
-          },
-        }
-      }
-    };
 
-    final fclCodeMap = {
-      'de': transaction.deRequestNumber,
-      'pl': transaction.plRequestNumber,
-      'dl': transaction.dlRequestNumber,
-      'pe': transaction.peRequestNumber,
-    };
 
-    String? matchingLegs;
-    for (final entry in fclCodeMap.entries) {
-      if (entry.value !=null && entry.value == requestNumber) {
-        matchingLegs = entry.key;
-        break;
-      }
+
+  String formatDateTime(String? dateString) {
+    if (dateString == null || dateString.isEmpty) return "N/A"; // Handle null values
+    
+    try {
+      DateTime dateTime = DateTime.parse(dateString); // Convert string to DateTime
+      DateTime adjustedTime = dateTime.add(const Duration(hours:8));
+      return DateFormat('dd MMM, yyyy  - h:mm a').format(adjustedTime); // Format date-time
+    } catch (e) {
+      return "Invalid Date"; // Handle errors gracefully
     }
+  } 
 
-    print("Matching Leg for $requestNumber: $matchingLegs");
-
-    if(matchingLegs != null) {
-      final fclMap = fclPrefixes[dispatchType]?[serviceType]?[matchingLegs];
-      final pickupFcl = fclMap?['pickup'];
-      final deliveryFcl = fclMap?['delivery'];
-
-      MilestoneHistoryModel? pickupSchedule;
-      MilestoneHistoryModel? deliverySchedule;
-
-      if(pickupFcl != null) {
-        pickupSchedule = history?.firstWhere(
-          (h) => 
-            h.fclCode.trim().toUpperCase() == pickupFcl.toUpperCase() &&
-            h.dispatchId == dispatchId.toString() &&
-            h.serviceType == serviceType,
-          orElse: () => const MilestoneHistoryModel(
-            id: -1,
-            dispatchId: '',
-            dispatchType: '',
-            fclCode: '',
-            scheduledDatetime: '',
-            serviceType: '',
-            actualDatetime: '', isBackload: ''
-          ),
-        );
-        if(pickupSchedule?.id == -1) pickupSchedule  = null;
-      }
-
-      if(deliveryFcl != null) {
-        deliverySchedule = history?.firstWhere(
-          (h) => 
-            h.fclCode.trim().toUpperCase() == deliveryFcl.toUpperCase() &&
-            h.dispatchId == dispatchId.toString() &&
-            h.serviceType == serviceType,
-          orElse: () => const MilestoneHistoryModel(
-            id: -1,
-            dispatchId: '',
-            dispatchType: '',
-            fclCode: '',
-            scheduledDatetime: '',
-            serviceType: '',
-            actualDatetime: '', isBackload: ''
-          ),
-        );
-        if(deliverySchedule?.id == -1) deliverySchedule  = null;
-      }
-      return {
-        'pickup': pickupSchedule,
-        'delivery': deliverySchedule,
-      };
-    }
-    return {
-      'pickup': null,
-      'delivery': null,
-    };
-
-
-   }
-
-
-    String formatDateTime(String? dateString) {
-      if (dateString == null || dateString.isEmpty) return "N/A"; // Handle null values
-      
-      try {
-        DateTime dateTime = DateTime.parse(dateString); // Convert string to DateTime
-        DateTime adjustedTime = dateTime.add(const Duration(hours:8));
-        return DateFormat('dd MMM, yyyy  - h:mm a').format(adjustedTime); // Format date-time
-      } catch (e) {
-        return "Invalid Date"; // Handle errors gracefully
-      }
-    } 
 
   
   @override
   Widget build(BuildContext context) {
+     if (isLoading) {
+    // Show a loading spinner while fetching data
+    return const Scaffold(
+      body: Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
+  }
+  
+
+  // Once loaded, show the normal content
+  final transaction = this.transaction ?? widget.transaction;
+    
     // 1️⃣ Backloaded message
     final backloadedName = (widget.transaction?.backloadConsolidation?.name.trim().isNotEmpty ?? false)
         ? widget.transaction?.backloadConsolidation?.name
         : 'N/A';
     final backloadedMessage = 'This booking has been backloaded: $backloadedName';
-    final transaction = widget.transaction;
+    
 
-    final scheduleMap = getPickupAndDeliverySchedule(transaction);
+   final String driverId = ref.watch(authNotifierProvider).partnerId ?? '';
 
-     final delivery = scheduleMap['delivery'];
+  final Map<String, dynamic> scheduleMap = TransactionUtils.getScheduleForTransaction(transaction!, driverId, widget.transaction?.requestNumber);
+  final expandedList = TransactionUtils.expandTransaction(transaction, driverId);
+  final openedRequestNumber = widget.transaction?.requestNumber;
 
+ 
 
-
+  // For OT
+  if (transaction.dispatchType == "ot") {
+    leg = expandedList.firstWhere(
+      (tx) => (tx.plTruckDriverName == driverId || tx.deTruckDriverName == driverId) &&
+              tx.requestNumber == openedRequestNumber,
+      orElse: () => expandedList.first,
+    );
+  } else if (transaction.dispatchType == "dt") {
+    leg = expandedList.firstWhere(
+      (tx) => (tx.dlTruckDriverName == driverId || tx.peTruckDriverName == driverId) &&
+              tx.requestNumber == openedRequestNumber,
+      orElse: () => expandedList.first,
+    );
+  }
 
     return Scaffold(
       appBar: AppBar(
@@ -317,13 +289,14 @@ class _HistoryDetailState extends ConsumerState<HistoryDetailScreen> {
       // 🕒 Display correct date depending on status
       Text(
         (() {
+         print("isReassigned: ${widget.transaction?.isReassigned}");
+
           if (widget.transaction?.isReassigned == true &&
               (widget.transaction?.reassigned?.isNotEmpty ?? false)) {
             return formatDateTime(widget.transaction!.reassigned!.first.createDate);
           } 
           // ✅ Completed or stage completed
-          else if (widget.transaction?.requestStatus == 'Completed' ||
-              widget.transaction?.stageId == 'Completed') {
+          else if (widget.transaction?.requestStatus == 'Completed' ) {
             final completedDate = widget.transaction?.completedTime;
             final deliveryActual = scheduleMap['delivery']?.actualDatetime;
 
@@ -357,8 +330,7 @@ class _HistoryDetailState extends ConsumerState<HistoryDetailScreen> {
           if (widget.transaction?.isReassigned == true &&
               (widget.transaction?.reassigned?.isNotEmpty ?? false)) {
             return 'Reassigned Date';
-          } else if (widget.transaction?.requestStatus == 'Completed' ||
-              widget.transaction?.stageId == 'Completed') {
+          } else if (widget.transaction?.requestStatus == 'Completed' ) {
             return 'Completed Date';
           } else if (widget.transaction?.stageId == 'Cancelled') {
             return 'Cancelled Date';
@@ -488,32 +460,50 @@ class _HistoryDetailState extends ConsumerState<HistoryDetailScreen> {
 
   Widget _buildShipConsTab (){
 
-    final transaction = widget.transaction;
-
-    // 🔒 Add this guard — it prevents null crashes during screen transition
+    final transaction = this.transaction ?? widget.transaction;
     if (transaction == null) {
-      return const Scaffold(
-        body: Center(child: Text('No transaction data available')),
-      );
+      return const Center(child: CircularProgressIndicator());
     }
 
     final isDT = widget.transaction?.dispatchType == 'dt';
-    final scheduleMap = getPickupAndDeliverySchedule(transaction);
-    final pickup = scheduleMap['pickup'];
-    final delivery = scheduleMap['delivery'];
-    final isDiverted = widget.transaction?.backloadConsolidation?.isDiverted == "true";
+     final String driverId = ref.watch(authNotifierProvider).partnerId ?? '';
+
+  final Map<String, dynamic> scheduleMap = TransactionUtils.getScheduleForTransaction(transaction, driverId, widget.transaction?.requestNumber);
+  final expandedList = TransactionUtils.expandTransaction(transaction, driverId);
+  final openedRequestNumber = widget.transaction?.requestNumber;
+
+  // For OT
+  if (transaction.dispatchType == "ot") {
+    leg = expandedList.firstWhere(
+      (tx) => (tx.plTruckDriverName == driverId || tx.deTruckDriverName == driverId) &&
+              tx.requestNumber == openedRequestNumber,
+      orElse: () => expandedList.first,
+    );
+  } else if (transaction.dispatchType == "dt") {
+    leg = expandedList.firstWhere(
+      (tx) => (tx.dlTruckDriverName == driverId || tx.peTruckDriverName == driverId) &&
+              tx.requestNumber == openedRequestNumber,
+      orElse: () => expandedList.first,
+    );
+  }
+ 
+
+
+  final pickup = scheduleMap['pickup'];
+  final delivery = scheduleMap['delivery'];
+    final isDiverted = transaction.backloadConsolidation?.isDiverted == "true";
     final divertedBookingNo = isDiverted 
-    ? 'Diverted Booking No: ${widget.transaction?.backloadConsolidation?.name ?? '—'}'
+    ? 'Diverted Booking No: ${transaction.backloadConsolidation?.name ?? '—'}'
     : null;
-    final consolStatus = widget.transaction?.backloadConsolidation?.status;
+    final consolStatus = transaction.backloadConsolidation?.status;
 
 
     print('pickup actual datetime: ${pickup?.actualDatetime}');
-    print('Dispatch Typr: ${widget.transaction?.dispatchType}');
+    print('Dispatch Typr: ${transaction.dispatchType}');
     print("request Number: ${widget.transaction?.requestNumber}");
-    print("Seal Number: ${widget.transaction?.sealNumber}");
+    print("Seal Number: ${transaction.sealNumber}");
     print("Is Diverted: $isDiverted");
-    print("'Diverted Booking No: ${widget.transaction?.backloadConsolidation?.name ?? '—'}'");
+    print("'Diverted Booking No: ${transaction.backloadConsolidation?.name ?? '—'}'");
     print("Consol Status $consolStatus");
 
     
@@ -560,11 +550,11 @@ class _HistoryDetailState extends ConsumerState<HistoryDetailScreen> {
 
     if (isDT) {
       // === DT LOGIC (existing) ===
-      if (widget.transaction?.requestNumber == widget.transaction?.dlRequestNumber) {
-        String tempYardSign = widget.transaction?.plSign ?? '';
-        String tempSign = widget.transaction?.dlSign ?? '';
-        String tempYardName = widget.transaction?.peReleasedBy ?? '';
-        String tempName = widget.transaction?.deReleasedBy ?? '';
+      if (widget.transaction?.requestNumber == transaction.dlRequestNumber) {
+        String tempYardSign =transaction.plSign ?? '';
+        String tempSign =transaction.dlSign ?? '';
+        String tempYardName =transaction.peReleasedBy ?? '';
+        String tempName =transaction.deReleasedBy ?? '';
         String tempYardActualDate = formatDateTime(pickup?.actualDatetime);
         String tempActualDate = formatDateTime(delivery?.actualDatetime);
         String tempYardTitle = "Yard/Port";
@@ -580,11 +570,11 @@ class _HistoryDetailState extends ConsumerState<HistoryDetailScreen> {
           yardtitle = tempYardTitle;
           title = tempTitle;
         
-      } else if (widget.transaction?.requestNumber == widget.transaction?.peRequestNumber) {
-        String tempYardSign = widget.transaction?.deSign ?? '';
-        String tempSign = widget.transaction?.peSign ?? '';
-        String tempYardName = widget.transaction?.plReceivedBy ?? '';
-        String tempName = widget.transaction?.dlReceivedBy ?? '';
+      } else if (widget.transaction?.requestNumber == transaction.peRequestNumber) {
+        String tempYardSign =transaction.deSign ?? '';
+        String tempSign =transaction.peSign ?? '';
+        String tempYardName =transaction.plReceivedBy ?? '';
+        String tempName =transaction.dlReceivedBy ?? '';
         String tempYardActualDate = formatDateTime(pickup?.actualDatetime);
         String tempActualDate = formatDateTime(delivery?.actualDatetime);
         String tempYardTitle = "Consignee";
@@ -610,21 +600,21 @@ class _HistoryDetailState extends ConsumerState<HistoryDetailScreen> {
           title = tempTitle;
         }
       } else {
-        if (widget.transaction?.requestNumber == widget.transaction?.dlRequestNumber) {
-          yardSignBase64 = widget.transaction?.peSign;
-          signBase64 = widget.transaction?.deSign;
-          yardName = widget.transaction?.peReleasedBy;
-          name = widget.transaction?.deReleasedBy;
+        if (widget.transaction?.requestNumber == transaction.dlRequestNumber) {
+          yardSignBase64 =transaction.peSign;
+          signBase64 =transaction.deSign;
+          yardName =transaction.peReleasedBy;
+          name =transaction.deReleasedBy;
           yardactualdate = formatDateTime(pickup?.actualDatetime);
           actualdate = formatDateTime(delivery?.actualDatetime);
           yardtitle = "Yard/Port";
           title = "Shipper";
 
-        } else if (widget.transaction?.requestNumber == widget.transaction?.plRequestNumber) {
-          yardSignBase64 = widget.transaction?.dlSign;
-          signBase64 = widget.transaction?.plSign;
-          yardName = widget.transaction?.plReceivedBy;
-          name = widget.transaction?.dlReceivedBy;
+        } else if (widget.transaction?.requestNumber == transaction.plRequestNumber) {
+          yardSignBase64 = transaction.dlSign;
+          signBase64 = transaction.plSign;
+          yardName = transaction.plReceivedBy;
+          name = transaction.dlReceivedBy;
           yardactualdate = formatDateTime(pickup?.actualDatetime);
           actualdate = formatDateTime(delivery?.actualDatetime);
           yardtitle = "Shipper";
@@ -634,11 +624,11 @@ class _HistoryDetailState extends ConsumerState<HistoryDetailScreen> {
 
     } else {
       // === OT / NON-DT LOGIC (mirrored) ===
-      if (widget.transaction?.requestNumber == widget.transaction?.deRequestNumber) {
-        String tempYardSign = widget.transaction?.peSign ?? '';
-        String tempSign = widget.transaction?.deSign ?? '';
-        String tempYardName = widget.transaction?.peReleasedBy ?? '';
-        String tempName = widget.transaction?.deReleasedBy ?? '';
+      if (widget.transaction?.requestNumber == transaction.deRequestNumber) {
+        String tempYardSign = transaction.peSign ?? '';
+        String tempSign = transaction.deSign ?? '';
+        String tempYardName = transaction.peReleasedBy ?? '';
+        String tempName = transaction.deReleasedBy ?? '';
         String tempYardActualDate = formatDateTime(pickup?.actualDatetime);
         String tempActualDate = formatDateTime(delivery?.actualDatetime);
         String tempYardTitle = "Yard/Port";
@@ -663,11 +653,11 @@ class _HistoryDetailState extends ConsumerState<HistoryDetailScreen> {
           yardtitle = tempYardTitle;
           title = tempTitle;
         }
-      } else if (widget.transaction?.requestNumber == widget.transaction?.plRequestNumber) {
-        String tempYardSign = widget.transaction?.dlSign ?? '';
-        String tempSign = widget.transaction?.plSign ?? '';
-        String tempYardName = widget.transaction?.plReceivedBy ?? '';
-        String tempName = widget.transaction?.dlReceivedBy ?? '';
+      } else if (widget.transaction?.requestNumber == transaction.plRequestNumber) {
+        String tempYardSign = transaction.dlSign ?? '';
+        String tempSign = transaction.plSign ?? '';
+        String tempYardName = transaction.plReceivedBy ?? '';
+        String tempName = transaction.dlReceivedBy ?? '';
         String tempYardActualDate = formatDateTime(pickup?.actualDatetime);
         String tempActualDate = formatDateTime(delivery?.actualDatetime);
         String tempYardTitle = "Shipper";
@@ -685,10 +675,10 @@ class _HistoryDetailState extends ConsumerState<HistoryDetailScreen> {
         
       } else {
         // fallback — if no specific requestNumber matches
-        yardSignBase64 = widget.transaction?.plSign;
-        signBase64 = widget.transaction?.dlSign;
-        yardName = widget.transaction?.plReceivedBy;
-        name = widget.transaction?.dlReceivedBy;
+        yardSignBase64 = transaction.plSign;
+        signBase64 = transaction.dlSign;
+        yardName = transaction.plReceivedBy;
+        name = transaction.dlReceivedBy;
         yardactualdate = formatDateTime(pickup?.actualDatetime);
         actualdate = formatDateTime(delivery?.actualDatetime);
         yardtitle = "Shipper";
@@ -703,35 +693,35 @@ class _HistoryDetailState extends ConsumerState<HistoryDetailScreen> {
 
     final reqNo = widget.transaction?.requestNumber;
 
-  if (isDT && reqNo == widget.transaction?.dlRequestNumber) {
+  if (isDT && reqNo == transaction.dlRequestNumber) {
     // DT + dlRequestNumber:
     // Yard: only plProof
-    addFile(yardFiles, widget.transaction?.plProof, widget.transaction?.plProofFilename ?? "POD");
+    addFile(yardFiles, transaction.plProof,transaction.plProofFilename ?? "POD");
 
     // Consignee (full pack): plProof + shared( hwbSigned, dlProof, deliveryReceipt, packingList, deliveryNote, stockDelivery, salesInvoice )
-    addFile(shipperConsigneeFiles, widget.transaction?.dlProof, widget.transaction?.dlProofFilename);
-    addFile(shipperConsigneeFiles, widget.transaction?.hwbSigned, widget.transaction?.hwbSignedFilename);
-    addFile(shipperConsigneeFiles, widget.transaction?.deliveryReceipt, widget.transaction?.deliveryReceiptFilename);
-    addFile(shipperConsigneeFiles, widget.transaction?.packingList, widget.transaction?.packingListFilename);
-    addFile(shipperConsigneeFiles, widget.transaction?.deliveryNote, widget.transaction?.deliveryNoteFilename);
-    addFile(shipperConsigneeFiles, widget.transaction?.stockDelivery, widget.transaction?.stockDeliveryFilename);
-    addFile(shipperConsigneeFiles, widget.transaction?.salesInvoice, widget.transaction?.salesInvoiceFilename);
-  }else  if (isDT && reqNo == widget.transaction?.peRequestNumber) {
+    addFile(shipperConsigneeFiles,transaction.dlProof,transaction.dlProofFilename);
+    addFile(shipperConsigneeFiles,transaction.hwbSigned,transaction.hwbSignedFilename);
+    addFile(shipperConsigneeFiles,transaction.deliveryReceipt,transaction.deliveryReceiptFilename);
+    addFile(shipperConsigneeFiles,transaction.packingList,transaction.packingListFilename);
+    addFile(shipperConsigneeFiles,transaction.deliveryNote,transaction.deliveryNoteFilename);
+    addFile(shipperConsigneeFiles,transaction.stockDelivery,transaction.stockDeliveryFilename);
+    addFile(shipperConsigneeFiles,transaction.salesInvoice,transaction.salesInvoiceFilename);
+  }else  if (isDT && reqNo == transaction.peRequestNumber) {
     // DT + dlRequestNumber:
     // Yard: only plProof
-    addFile(yardFiles, widget.transaction?.peProof, widget.transaction?.peProofFilename ?? "POD");
-    addFile(shipperConsigneeFiles, widget.transaction?.deProof, widget.transaction?.deProofFilename ?? "POD");
+    addFile(yardFiles, transaction.peProof, transaction.peProofFilename ?? "POD");
+    addFile(shipperConsigneeFiles, transaction.deProof, transaction.deProofFilename ?? "POD");
   } 
-  else if (!isDT && reqNo == widget.transaction?.plRequestNumber) {
+  else if (!isDT && reqNo == transaction.plRequestNumber) {
     // OT + plRequestNumber:
-    addFile(shipperConsigneeFiles, widget.transaction?.dlProof, widget.transaction?.dlProofFilename); // yard has dlProof
-    addFile(yardFiles, widget.transaction?.plProof, widget.transaction?.plProofFilename); // shipper has plProof
-    addFile(yardFiles, widget.transaction?.proofStock, widget.transaction?.proofStockFilename); // shipper has stock transfer
-  } else if (!isDT && reqNo == widget.transaction?.deRequestNumber) {
+    addFile(shipperConsigneeFiles, transaction.dlProof, transaction.dlProofFilename); // yard has dlProof
+    addFile(yardFiles, transaction.plProof, transaction.plProofFilename); // shipper has plProof
+    addFile(yardFiles, transaction.proofStock, transaction.proofStockFilename); // shipper has stock transfer
+  } else if (!isDT && reqNo == transaction.deRequestNumber) {
     // Fallback: if nothing matches, attempt to add any non-null generic files so user can still download what's available
    
-    addFile(yardFiles, widget.transaction?.peProof, widget.transaction?.peProofFilename);
-    addFile(shipperConsigneeFiles, widget.transaction?.deProof, widget.transaction?.deProofFilename);
+    addFile(yardFiles, transaction.peProof, transaction.peProofFilename);
+    addFile(shipperConsigneeFiles, transaction.deProof, transaction.deProofFilename);
 
   }
 
@@ -748,7 +738,7 @@ class _HistoryDetailState extends ConsumerState<HistoryDetailScreen> {
           )
         ),
         const SizedBox(height: 20),
-        if(isDiverted && widget.transaction?.deRequestNumber == reqNo  && consolStatus != 'draft') ... [
+        if(isDiverted && transaction.deRequestNumber == reqNo  && consolStatus != 'draft') ... [
           Text(
             "Remarks: Diverted",
             style: AppTextStyles.body.copyWith(
@@ -824,9 +814,18 @@ class _HistoryDetailState extends ConsumerState<HistoryDetailScreen> {
           color: Colors.grey,
           thickness: 1,
         ),
+        Text(
+            //  isDT ? 'Consignee' : 'Shipper',
+            title!,
+            style: AppTextStyles.body.copyWith(
+              color: mainColor,
+              fontWeight: FontWeight.bold, 
+            )
+          ),
+          const SizedBox(height: 20),
 
         // SHIPPER CONSIGNEE
-        if(isDiverted && widget.transaction?.peRequestNumber == reqNo   && consolStatus != 'draft') ... [
+        if(isDiverted && transaction.peRequestNumber == reqNo   && consolStatus != 'draft') ... [
           Text(
             "Remarks: Diverted",
             style: AppTextStyles.body.copyWith(
@@ -842,15 +841,7 @@ class _HistoryDetailState extends ConsumerState<HistoryDetailScreen> {
             )
           ),
         ] else ...[
-          Text(
-            //  isDT ? 'Consignee' : 'Shipper',
-            title!,
-            style: AppTextStyles.body.copyWith(
-              color: mainColor,
-              fontWeight: FontWeight.bold, 
-            )
-          ),
-          const SizedBox(height: 20),
+          
           Text(
           'Proof of Delivery',
             style: AppTextStyles.body.copyWith(
@@ -954,8 +945,9 @@ class _HistoryDetailState extends ConsumerState<HistoryDetailScreen> {
                   
                   final file = File('${dir.path}/$uniqueFileName');
                   await file.writeAsBytes(bytes);
+                  if(!mounted) return;
                   
-                  if(context.mounted){
+                  // if(context.mounted){
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(
@@ -975,7 +967,7 @@ class _HistoryDetailState extends ConsumerState<HistoryDetailScreen> {
                         elevation: 6, // ✅ Soft shadow for depth
                       ),
                     );
-                  }
+                  
 
                   print('✅ File saved: ${file.path}');
                 } catch (e) {
@@ -1022,7 +1014,17 @@ class _HistoryDetailState extends ConsumerState<HistoryDetailScreen> {
 
   Widget  _buildFreightTab(){
     final isDiverted = widget.transaction?.backloadConsolidation?.isDiverted == "true";
+    final isBackload = widget.transaction?.backloadConsolidation?.isBackload == "true";
     final consolStatus = widget.transaction?.backloadConsolidation?.status;
+
+    final isDivertOrBackload = isDiverted || isBackload;
+    final isConsolidated = consolStatus == "consolidated";
+
+    final isDT = widget.transaction?.dispatchType == 'dt' &&
+                widget.transaction?.requestNumber == widget.transaction?.peRequestNumber;
+
+    final isOT = widget.transaction?.dispatchType == 'ot' &&
+                widget.transaction?.requestNumber == widget.transaction?.deRequestNumber;
 
 
   
@@ -1031,10 +1033,11 @@ class _HistoryDetailState extends ConsumerState<HistoryDetailScreen> {
     ? (widget.transaction?.backloadConsolidation?.originName ?? '—')
     : (widget.transaction?.backloadConsolidation?.destinationName ?? '—');
 
+  
     return  Column( // Use a Column to arrange the widgets vertically
       crossAxisAlignment: CrossAxisAlignment.start, // Align text to the left
       children: [
-        if(isDiverted && consolStatus == 'consolidated') ... [
+        if ((isDT || isOT) && isDivertOrBackload && isConsolidated)... [
       
         Row(
           children: [
@@ -1067,7 +1070,7 @@ class _HistoryDetailState extends ConsumerState<HistoryDetailScreen> {
           ],
         
         ),
-       
+        ],
         const SizedBox(height: 20),
         Row(
           children: [
@@ -1083,8 +1086,12 @@ class _HistoryDetailState extends ConsumerState<HistoryDetailScreen> {
                   ),
                 ),
                 Text(
-                  (widget.transaction?.origin?.isNotEmpty ?? false)
-                  ? widget.transaction!.origin! : '—',
+                  (widget.transaction != null)
+                  ? ((widget.transaction!.dispatchType == 'ot'
+                          ? widget.transaction!.rawOrigin
+                          : widget.transaction!.rawDestination) ??
+                      '—')
+                  : '—',
                   style: AppTextStyles.body.copyWith(
                     color: Colors.black,
                   ),
@@ -1094,7 +1101,7 @@ class _HistoryDetailState extends ConsumerState<HistoryDetailScreen> {
             ),
           ],
         ),
-         ],
+        
         const SizedBox(height: 20),
         
         Row(
@@ -1113,8 +1120,8 @@ class _HistoryDetailState extends ConsumerState<HistoryDetailScreen> {
                     ),
                   ),
                   Text(
-                  (widget.transaction?.freightForwarderName?.isNotEmpty ?? false)
-                  ? widget.transaction!.freightForwarderName! : '—',
+                  (transaction?.freightForwarderName?.isNotEmpty ?? false)
+                  ? transaction!.freightForwarderName! : '—',
                     // Use the originPort variable here
                     style: AppTextStyles.body.copyWith(
                       color: Colors.black,
@@ -1143,8 +1150,8 @@ class _HistoryDetailState extends ConsumerState<HistoryDetailScreen> {
                   ),
                 ),
                 Text(
-                  (widget.transaction?.freightBlNumber?.isNotEmpty ?? false)
-                  ? widget.transaction!.freightBlNumber! : '—',
+                  (transaction?.freightBlNumber?.isNotEmpty ?? false)
+                  ? transaction!.freightBlNumber! : '—',
                   style: AppTextStyles.body.copyWith(
                     color: Colors.black,
                   ),
@@ -1171,8 +1178,8 @@ class _HistoryDetailState extends ConsumerState<HistoryDetailScreen> {
                 ),
                 Text(
                   
-                (widget.transaction?.containerNumber?.isNotEmpty ?? false)
-                  ? widget.transaction!.containerNumber!
+                (transaction?.containerNumber?.isNotEmpty ?? false)
+                  ? transaction!.containerNumber!
                   : '—',
                   // Use the originPort variable here
                   style: AppTextStyles.body.copyWith(
@@ -1200,8 +1207,8 @@ class _HistoryDetailState extends ConsumerState<HistoryDetailScreen> {
                   ),
                 ),
                 Text(
-                (widget.transaction?.sealNumber?.isNotEmpty ?? false)
-                  ? widget.transaction!.sealNumber!
+                (transaction?.sealNumber?.isNotEmpty ?? false)
+                  ? transaction!.sealNumber!
                   : '—',
                   // Use the originPort variable here
                   style: AppTextStyles.body.copyWith(

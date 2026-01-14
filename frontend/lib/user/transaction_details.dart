@@ -27,11 +27,12 @@ import 'package:frontend/user/detailed_details.dart';
 import 'package:frontend/user/history_screen.dart';
 import 'package:frontend/user/homepage_screen.dart';
 import 'package:frontend/user/proof_of_delivery_screen.dart';
+import 'package:frontend/util/transaction_utils.dart';
+import 'package:frontend/util/transction_helper.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart' as gmaps;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
-import 'package:http/http.dart' as ref;
 import 'package:latlong2/latlong.dart';
 import 'package:location/location.dart';
 import 'package:intl/intl.dart';
@@ -51,7 +52,11 @@ class TransactionDetails extends ConsumerStatefulWidget {
   final String uid; // Add a field for uid
 
   // Constructor to accept the nullable Transaction object
-  const TransactionDetails({super.key, required this.transaction, required int id, String? requestNumber, required this.uid});
+  const TransactionDetails({
+    super.key,
+    required this.transaction,
+    required this.uid, required int id,
+  });
 
   // Helper function to handle null values and provide fallback
   String getNullableValue(String? value, {String fallback = ''}) {
@@ -69,8 +74,10 @@ class TransactionDetails extends ConsumerStatefulWidget {
 class _TransactionDetailsState extends ConsumerState<TransactionDetails> {
   
   // final Map<String, bool> _loadingStates = {};
+  
 
   gmaps.GoogleMapController? _googleMapController;
+   Transaction? transaction;
 
  
   Location location = Location();
@@ -102,136 +109,70 @@ class _TransactionDetailsState extends ConsumerState<TransactionDetails> {
     }
       
   }
+   Transaction? leg;
 
-  Map<String, MilestoneHistoryModel?> getPickupAndDeliverySchedule(Transaction? transaction) {
-    final dispatchType = transaction!.dispatchType;
-    final history = transaction.history;
-    final serviceType = transaction.serviceType;
-    final dispatchId = transaction.id;
-    final requestNumber = transaction.requestNumber;
-
-    final fclPrefixes = {
-      'ot': {
-        'Full Container Load': {
-          'de': {
-            'delivery': 'TEOT',
-            'pickup': 'TYOT'
-          },
-          'pl': {
-            'delivery': 'CLOT',
-            'pickup': 'TLOT'
-          },
-        },
-        'Less-Than-Container Load': {
-          'pl': {
-            // 'delivery': 'LCLOT',
-            'pickup': 'LTEOT'
-          },
-        },
-      },
-      'dt': {
-        'Full Container Load': {
-          'dl': {
-            'delivery': 'CLDT',
-            'pickup': 'GYDT'
-          },
-          'pe': {
-            'delivery': 'CYDT',
-            'pickup': 'GLDT'
-          },
-        },
-        'Less-Than-Container Load': {
-          'dl': {
-            'delivery': 'LCLDT',
-            // 'pickup': 'LTEOT'
-          },
-        }
-      }
-    };
-
-    final fclCodeMap = {
-      'de': transaction.deRequestNumber,
-      'pl': transaction.plRequestNumber,
-      'dl': transaction.dlRequestNumber,
-      'pe': transaction.peRequestNumber,
-    };
-
-    String? matchingLegs;
-    for (final entry in fclCodeMap.entries) {
-      if (entry.value !=null && entry.value == requestNumber) {
-        matchingLegs = entry.key;
-        break;
-      }
-    }
-
-    print("Matching Leg for $requestNumber: $matchingLegs");
-
-    if(matchingLegs != null) {
-      final fclMap = fclPrefixes[dispatchType]?[serviceType]?[matchingLegs];
-      final pickupFcl = fclMap?['pickup'];
-      final deliveryFcl = fclMap?['delivery'];
-
-      MilestoneHistoryModel? pickupSchedule;
-      MilestoneHistoryModel? deliverySchedule;
-
-      if(pickupFcl != null) {
-        pickupSchedule = history!.firstWhere(
-          (h) => 
-            h.fclCode.trim().toUpperCase() == pickupFcl.toUpperCase() &&
-            h.dispatchId == dispatchId.toString() &&
-            h.serviceType == serviceType,
-          orElse: () => const MilestoneHistoryModel(
-            id: -1,
-            dispatchId: '',
-            dispatchType: '',
-            fclCode: '',
-            scheduledDatetime: '',
-            actualDatetime: '',
-            serviceType: '', isBackload: '',
-           
-          ),
-        );
-        if(pickupSchedule.id == -1) pickupSchedule  = null;
-      }
-
-      if(deliveryFcl != null) {
-        deliverySchedule = history!.firstWhere(
-          (h) => 
-            h.fclCode.trim().toUpperCase() == deliveryFcl.toUpperCase() &&
-            h.dispatchId == dispatchId.toString() &&
-            h.serviceType == serviceType,
-          orElse: () => const MilestoneHistoryModel(
-            id: -1,
-            dispatchId: '',
-            dispatchType: '',
-            fclCode: '',
-            scheduledDatetime: '',
-            actualDatetime: '',
-            serviceType: '', isBackload: '',
-            
-          ),
-        );
-        if(deliverySchedule.id == -1) deliverySchedule  = null;
-      }
-      return {
-        'pickup': pickupSchedule,
-        'delivery': deliverySchedule,
-      };
-    }
-    return {
-      'pickup': null,
-      'delivery': null,
-    };
-
-
-   }
-
+   
+  
   @override
   void initState() {
     super.initState();
     initLocation();
     _expandedTabIndex = 1;
+     _fetchTransactionDetails();
   }
+
+  bool isLoading = true;
+
+Future<void> _fetchTransactionDetails() async {
+  print("Fetching details for transaction ID: ${widget.transaction?.id}");
+  print("Request Number: ${widget.transaction?.requestNumber}");
+  print('➡️ TransactionDetails params: id=${widget.transaction?.id}, uid=${widget.uid}');
+
+  try {
+    final baseUrl = ref.read(baseUrlProvider);
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/odoo/booking/transaction_details/${widget.transaction?.id}?uid=${widget.uid}'),
+      headers: {
+        'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'password': ref.read(authNotifierProvider).password ?? '',
+          'login':ref.read(authNotifierProvider).login ?? ''
+      },
+    );
+
+  if (response.statusCode == 200) {
+      final jsonData = jsonDecode(response.body);
+
+      // check if structure is what you expect
+      final data = jsonData['data'];
+      final transactions = data?['transactions'];
+
+      if (transactions != null && transactions is List && transactions.isNotEmpty) {
+        final selected = transactions.firstWhere(
+          (tx) => tx['id'] == widget.transaction?.id,
+          orElse: () => transactions.first,
+        );
+
+        debugPrint('✅ Found transaction: ${selected['id']}');
+
+        setState(() {
+          transaction = Transaction.fromJson(selected);
+          isLoading = false;
+        });
+      } else {
+        debugPrint('⚠️ No transactions found in response.');
+        setState(() => isLoading = false);
+      }
+    } else {
+      debugPrint('❌ Failed request. Code: ${response.statusCode}');
+      setState(() => isLoading = false);
+    }
+  } catch (e) {
+    setState(() => isLoading = false);
+    debugPrint('Error fetching transaction: $e');
+  }
+  
+}
 
   Future<void> initLocation() async {
     _serviceEnabled = await location.serviceEnabled();
@@ -269,39 +210,69 @@ class _TransactionDetailsState extends ConsumerState<TransactionDetails> {
     }
   } 
 
+ 
+ 
   
 
 
   @override
   Widget build(BuildContext context) {
-   final bookingNumber = widget.transaction?.bookingRefNumber?.trim();
+    // Early return if transaction is null
+    if (transaction == null) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+  // At this point, transaction is guaranteed non-null
+  final bookingNumber = transaction?.bookingRefNumber?.trim();
+  final String driverId = ref.watch(authNotifierProvider).partnerId ?? '';
+
+  final Map<String, dynamic> scheduleMap = TransactionUtils.getScheduleForTransaction(transaction!, driverId, widget.transaction?.requestNumber);
+  final expandedList = TransactionUtils.expandTransaction(transaction!, driverId);
+  final openedRequestNumber = widget.transaction?.requestNumber;
+
+  // For OT
+  if (transaction!.dispatchType == "ot") {
+    leg = expandedList.firstWhere(
+      (tx) => (tx.plTruckDriverName == driverId || tx.deTruckDriverName == driverId) &&
+              tx.requestNumber == openedRequestNumber,
+      orElse: () => expandedList.first,
+    );
+  } else if (transaction!.dispatchType == "dt") {
+    leg = expandedList.firstWhere(
+      (tx) => (tx.dlTruckDriverName == driverId || tx.peTruckDriverName == driverId) &&
+              tx.requestNumber == openedRequestNumber,
+      orElse: () => expandedList.first,
+    );
+  }
  
-   
-   
-    // If transaction is null, display a fallback message
-      final scheduleMap = getPickupAndDeliverySchedule(widget.transaction!);
-final pickup = scheduleMap['pickup'];
-final delivery = scheduleMap['delivery'];
-    final showTabs = widget.transaction?.requestStatus == "Ongoing";
+
+
+  final pickup = scheduleMap['pickup'];
+  final delivery = scheduleMap['delivery'];
+  final showTabs = widget.transaction?.requestStatus == "Ongoing";
     return Consumer(
       builder: (context, ref, child) {
-         final allTransactions = ref.watch(transactionListProvider);
+        final allTransactions = ref.watch(transactionListProvider);
 
-  final relatedFF = allTransactions.cast<Transaction?>().firstWhere(
-    (tx) =>
-      tx?.bookingRefNumber?.trim() == bookingNumber &&
-      tx?.dispatchType?.toLowerCase().trim() == 'ff',
-    orElse: () => null,
-  );
+        final relatedFF = allTransactions.cast<Transaction?>().firstWhere(
+          (tx) =>
+            tx?.bookingRefNumber?.trim() == bookingNumber &&
+            tx?.dispatchType?.toLowerCase().trim() == 'ff',
+          orElse: () => null,
+        );
 
-        if (widget.transaction == null) {
+        if (isLoading) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        if (transaction == null) {
           return Scaffold(
-            appBar: AppBar(
-              title: const Text("Booking Details"),
-            ),
-            body: const Center(
-              child: Text("No transaction details available."),
-            ),
+            appBar: AppBar(title: const Text("Booking Details")),
+            body: const Center(child: Text("No transaction details available.")),
           );
         }
       
@@ -322,7 +293,7 @@ final delivery = scheduleMap['delivery'];
                       // color: Colors.green[500], // Set background color for this section
                       padding: const EdgeInsets.all(8.0),
                       child: Text(
-                        " ${getNullableValue(widget.transaction?.name).toUpperCase()}", // Section Title
+                        getNullableValue(widget.transaction?.name).toUpperCase(), // Section Title
                         style: AppTextStyles.body.copyWith(
                           fontWeight: FontWeight.bold,
                           color: mainColor,
@@ -333,12 +304,11 @@ final delivery = scheduleMap['delivery'];
                     Padding(
                  
                       padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                      child: Text(
-                        widget.transaction!.originAddress!.toUpperCase(), // Section Title
+                      child: Text(widget.transaction?.originAddress?.toUpperCase() ?? '',
                         style: AppTextStyles.caption.copyWith(
                           fontWeight: FontWeight.bold,
                           color: mainColor,
-                        ),
+                        ),  
                       ),
                     ),
 
@@ -456,6 +426,7 @@ final delivery = scheduleMap['delivery'];
                           // Space between label and value
                           
                           Text(
+                            
                             "Dispatch Booking  Number",
                             style: AppTextStyles.caption.copyWith(
                               fontSize: 12,
@@ -463,7 +434,7 @@ final delivery = scheduleMap['delivery'];
                             ),
                           ),
                           Text(
-                            widget.transaction?.bookingRefNo ?? '',
+                            transaction?.bookingRefNo ?? '',
                             style: AppTextStyles.subtitle.copyWith(
                               fontSize: 22,
                               fontWeight: FontWeight.bold,
@@ -500,8 +471,8 @@ final delivery = scheduleMap['delivery'];
                             ),
                           ),
                           Text(
-                            (widget.transaction?.freightBookingNumber?.isNotEmpty ?? false)
-                              ? widget.transaction!.freightBookingNumber! : '—',
+                            (transaction?.freightBookingNumber?.isNotEmpty ?? false)
+                              ? transaction!.freightBookingNumber! : '—',
                             style: AppTextStyles.subtitle.copyWith(
                               fontSize: 22,
                               fontWeight: FontWeight.bold,
@@ -537,8 +508,8 @@ final delivery = scheduleMap['delivery'];
                             ),
                           ),
                           Text(
-                            (widget.transaction?.freightBlNumber?.isNotEmpty ?? false)
-                              ? widget.transaction!.freightBlNumber! : '—',
+                            (transaction?.freightBlNumber?.isNotEmpty ?? false)
+                              ?transaction!.freightBlNumber! : '—',
                             style: AppTextStyles.subtitle.copyWith(
                               fontSize: 22,
                               fontWeight: FontWeight.bold,
@@ -574,8 +545,8 @@ final delivery = scheduleMap['delivery'];
                             ),
                           ),
                           Text(
-                            (widget.transaction?.containerNumber?.isNotEmpty ?? false)
-                              ? widget.transaction!.containerNumber! : '—',
+                            (transaction?.containerNumber?.isNotEmpty ?? false)
+                              ? transaction!.containerNumber! : '—',
                             style: AppTextStyles.subtitle.copyWith(
                               fontSize: 22,
                               fontWeight: FontWeight.bold,
@@ -608,7 +579,7 @@ final delivery = scheduleMap['delivery'];
                               children: [
                                 // Space between label and value
                                 Text(
-                                  widget.transaction?.origin ?? '',
+                                  leg?.origin ?? '',
                                   style: AppTextStyles.subtitle.copyWith(
                                     fontWeight: FontWeight.bold,
                                     color: mainColor,
@@ -662,7 +633,7 @@ final delivery = scheduleMap['delivery'];
                               children: [
                                 // Space between label and value
                                 Text(
-                                  widget.transaction?.destination ?? '',
+                                 leg?.destination ?? '',
                                   style: AppTextStyles.subtitle.copyWith(
                                     fontWeight: FontWeight.bold,
                                     color: mainColor,
@@ -682,7 +653,7 @@ final delivery = scheduleMap['delivery'];
                     ),
                     Column(
   children: [
-    if (!(widget.transaction?.serviceType == "Less-Than-Container Load" && widget.transaction?.dispatchType == 'DT')) // Show pickup unless serviceType=2 and dispatchType=DT
+    if (!(transaction?.serviceType == "Less-Than-Container Load" && transaction?.dispatchType == 'DT')) // Show pickup unless serviceType=2 and dispatchType=DT
       Container(
         padding: const EdgeInsets.all(7.0),
         child: Row(
@@ -720,7 +691,7 @@ final delivery = scheduleMap['delivery'];
         ),
       ),
 
-    if (!(widget.transaction?.serviceType == "Less-Than-Container Load" && widget.transaction?.dispatchType == 'OT')) // Show delivery unless serviceType=2 and dispatchType=OT
+    if (!(transaction?.serviceType == "Less-Than-Container Load" && transaction?.dispatchType == 'OT')) // Show delivery unless serviceType=2 and dispatchType=OT
       Container(
         padding: const EdgeInsets.all(7.0),
         child: Row(
@@ -760,7 +731,7 @@ final delivery = scheduleMap['delivery'];
   ],
 ),
 
-                
+                    if(transaction?.landTransport != "transport")
                     Container(
                       padding: const EdgeInsets.all(7.0),
                       child: Row(
@@ -773,21 +744,22 @@ final delivery = scheduleMap['delivery'];
                             size: 24,
                           ),
                           const SizedBox(width: 8), // Space between icon and text
+                          
                           Expanded(
                             child:Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               // Space between label and value
                               Text( 
-                                widget.transaction?.dispatchType == 'ot' ? formatDateTime(widget.transaction?.departureDate)
-                                : formatDateTime(widget.transaction?.arrivalDate),
+                                transaction?.dispatchType == 'ot' ? formatDateTime(transaction?.departureDate)
+                                : formatDateTime(transaction?.arrivalDate),
                                 style: AppTextStyles.subtitle.copyWith(
                                   fontWeight: FontWeight.bold,
                                   color: mainColor,
                                 )
                               ),
                               Text(
-                                widget.transaction?.dispatchType == 'ot' ? " Vessel Departure Date" 
+                               transaction?.dispatchType == 'ot' ? " Vessel Departure Date" 
                                 :  "Vessel Arrival Date",
                                 style: AppTextStyles.caption.copyWith(
                                   color: mainColor,
@@ -858,18 +830,18 @@ final delivery = scheduleMap['delivery'];
                       child: ElevatedButton(
                       onPressed: () async {
                         // if (widget.transaction?.requestStatus != 'Pending') {
-                        if (widget.transaction?.requestStatus == 'Ongoing') {
+                        if (leg?.requestStatus == 'Ongoing') {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => ConfirmationScreen(uid: widget.uid, transaction: widget.transaction, relatedFF:relatedFF ,),
+                              builder: (context) => ConfirmationScreen(uid: widget.uid, transaction:leg, relatedFF:relatedFF, requestNumber: leg!.requestNumber, id: widget.transaction?.id ?? 0,),
                             ),
                           );
                         }else {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => DetailedDetailScreen(uid: widget.uid, transaction: widget.transaction, relatedFF: relatedFF),
+                              builder: (context) => DetailedDetailScreen(uid: widget.uid, transaction: leg, relatedFF: relatedFF),
                             ),
                           );
                         }
@@ -958,32 +930,28 @@ final delivery = scheduleMap['delivery'];
     String? proofBase64;
     String? filename;
 
-    print('Request Number:${widget.transaction?.requestNumber}' );
+    // print('Request Number:${transaction?.requestNumber}' );
     
 
     if (isDT) {
-      if (widget.transaction?.requestNumber == widget.transaction?.dlRequestNumber) {
-        signBase64 = widget.transaction?.plSign;
-        proofBase64 = widget.transaction?.plProof;
-        filename = widget.transaction?.plProofFilename;
-        addFile(singleFile, widget.transaction?.plProof, widget.transaction?.plProofFilename); // shipper has plProof
-      } else if (widget.transaction?.requestNumber == widget.transaction?.peRequestNumber) {
-        signBase64 = widget.transaction?.deSign;
-        proofBase64 = widget.transaction?.deProof;
-        filename = widget.transaction?.deProofFilename;
-        addFile(singleFile, widget.transaction?.deProof, widget.transaction?.deProofFilename);
+      if (widget.transaction?.requestNumber == transaction?.dlRequestNumber) {
+        signBase64 = transaction?.plSign;
+        proofBase64 = transaction?.plProof;
+        filename = transaction?.plProofFilename;
+      } else if (widget.transaction?.requestNumber == transaction?.peRequestNumber) {
+        signBase64 = transaction?.deSign;
+        proofBase64 = transaction?.deProof;
+        filename = transaction?.deProofFilename;
       }
     } else {
-      if (widget.transaction?.requestNumber == widget.transaction?.deRequestNumber) {
-        signBase64 = widget.transaction?.peSign;
-        proofBase64 = widget.transaction?.peProof;
-        filename = widget.transaction?.peProofFilename;
-        addFile(singleFile, widget.transaction?.peProof, widget.transaction?.peProofFilename);
-      } else if (widget.transaction?.requestNumber == widget.transaction?.plRequestNumber) {
-        signBase64 = widget.transaction?.dlSign;
-        proofBase64 = widget.transaction?.dlProof;
-        filename = widget.transaction?.dlProofFilename;
-        addFile(singleFile, widget.transaction?.dlProof, widget.transaction?.dlProofFilename);
+      if (widget.transaction?.requestNumber == transaction?.deRequestNumber) {
+        signBase64 = transaction?.peSign;
+        proofBase64 = transaction?.peProof;
+        filename = transaction?.peProofFilename;
+      } else if (widget.transaction?.requestNumber == transaction?.plRequestNumber) {
+        signBase64 = transaction?.dlSign;
+        proofBase64 = transaction?.dlProof;
+        filename = transaction?.dlProofFilename;
        
       }
     }
@@ -1037,7 +1005,7 @@ final delivery = scheduleMap['delivery'];
   }
 
   Widget _buildShipConsTab (){
-    final isDT = widget.transaction?.dispatchType == 'dt';
+    final isDT = transaction?.dispatchType == 'dt';
 
     Uint8List? decodeBase64(String? data) {
       if(data == null || data.isEmpty)  return null;
@@ -1074,29 +1042,29 @@ final delivery = scheduleMap['delivery'];
     
 
     if (isDT) {
-      if (widget.transaction?.requestNumber == widget.transaction?.dlRequestNumber) {
-        signBase64 = widget.transaction?.dlSign;
-        proofBase64 = widget.transaction?.dlProof;
-        filename = widget.transaction?.dlProofFilename;
-        addFile(shipperConsigneeFiles, widget.transaction?.dlProof, widget.transaction?.dlProofFilename);
-      } else if (widget.transaction?.requestNumber == widget.transaction?.peRequestNumber) {
-        signBase64 = widget.transaction?.peSign;
-        proofBase64 = widget.transaction?.peProof;
-        filename = widget.transaction?.peProofFilename;
-        addFile(shipperConsigneeFiles, widget.transaction?.peProof, widget.transaction?.peProofFilename); 
+      if (widget.transaction?.requestNumber == transaction?.dlRequestNumber) {
+        signBase64 = transaction?.dlSign;
+        proofBase64 = transaction?.dlProof;
+        filename = transaction?.dlProofFilename;
+        addFile(shipperConsigneeFiles, transaction?.dlProof, transaction?.dlProofFilename);
+      } else if (widget.transaction?.requestNumber == transaction?.peRequestNumber) {
+        signBase64 = transaction?.peSign;
+        proofBase64 = transaction?.peProof;
+        filename = transaction?.peProofFilename;
+        addFile(shipperConsigneeFiles, transaction?.peProof, transaction?.peProofFilename); 
       }
     } else {
-      if (widget.transaction?.requestNumber == widget.transaction?.deRequestNumber) {
-        signBase64 = widget.transaction?.deSign;
-        proofBase64 = widget.transaction?.deProof;
-        filename = widget.transaction?.deProofFilename;
-        addFile(shipperConsigneeFiles, widget.transaction?.deProof, widget.transaction?.deProofFilename);
-      } else if (widget.transaction?.requestNumber == widget.transaction?.plRequestNumber) {
-        signBase64 = widget.transaction?.plSign;
-        proofBase64 = widget.transaction?.plProof;
-        filename = widget.transaction?.dlProofFilename;
-        addFile(shipperConsigneeFiles, widget.transaction?.plProof, widget.transaction?.plProofFilename); // shipper has plProof
-        addFile(shipperConsigneeFiles, widget.transaction?.proofStock, widget.transaction?.proofStockFilename); // shipper has stock transfer
+      if (widget.transaction?.requestNumber == transaction?.deRequestNumber) {
+        signBase64 = transaction?.deSign;
+        proofBase64 = transaction?.deProof;
+        filename = transaction?.deProofFilename;
+        addFile(shipperConsigneeFiles, transaction?.deProof, transaction?.deProofFilename);
+      } else if (widget.transaction?.requestNumber == transaction?.plRequestNumber) {
+        signBase64 = transaction?.plSign;
+        proofBase64 = transaction?.plProof;
+        filename = transaction?.dlProofFilename;
+        addFile(shipperConsigneeFiles, transaction?.plProof, transaction?.plProofFilename); // shipper has plProof
+        addFile(shipperConsigneeFiles, transaction?.proofStock, transaction?.proofStockFilename); // shipper has stock transfer
       }
     }
 
@@ -1145,7 +1113,7 @@ final delivery = scheduleMap['delivery'];
     );
   }
 
-   Widget _buildDownloadButton(String fileName, Uint8List bytes) {
+  Widget _buildDownloadButton(String fileName, Uint8List bytes) {
       return SizedBox(
         child: Padding(
         padding: const EdgeInsets.only(bottom: 8),
@@ -1276,3 +1244,4 @@ class FullScreenImage extends StatelessWidget{
     );
   }
 }
+

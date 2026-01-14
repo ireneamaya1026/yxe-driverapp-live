@@ -129,6 +129,9 @@ class Transaction {
   final String? salesInvoice;
   final String? salesInvoiceFilename;
 
+  final String? rawOrigin;
+
+  final String? rawDestination;
   // final String? completeAddress ;
 
 
@@ -245,11 +248,14 @@ class Transaction {
      this.salesInvoice,
      this.salesInvoiceFilename,
     this.isReassigned = false,
+    this.rawOrigin,
+    this.rawDestination
   });
 
   factory Transaction.fromJson(Map<String, dynamic> json) {
     // print('knii Raw transaction JSON: $json');
     final rawConsolidation = json['backload_consolidation'];
+    // print("this is raw origin: ${json['origin_port']}"); // Likely null or empty
 
 
     return Transaction(
@@ -275,7 +281,7 @@ class Transaction {
                     ? (json['shipper_phone'] != null && json['shipper_phone'].toString().isNotEmpty
                         ? json['shipper_phone']
                         : '')
-                    : (json['consignee_phone'] != null && json['consignee_phone'].toString().isNotEmpty
+                    : (json['consignee_phone'] != null && json['  consignee_phone'].toString().isNotEmpty
                         ? json['consignee_phone']
                         : ''),
 
@@ -396,6 +402,12 @@ class Transaction {
         ? [DriverReassignment.fromJson(json['reassigned'] as Map<String, dynamic>)]
         : [],
 
+        rawOrigin: json['origin_port']?.toString(),
+      rawDestination: json['destination_port']?.toString(),
+
+        
+
+
         
 
 
@@ -445,7 +457,7 @@ class Transaction {
 
 
   Transaction copyWith({String? name, String? destination,String? requestNumber,String? origin,String? requestStatus,status, bool? isAccepted, String? truckPlateNumber, String? destinationAddress, String? originAddress, String? rejectedTime, String? completedTime, String? assignedDate, String? freightBookingNumber,
-   List<DriverReassignment>? reassigned,  bool? isReassigned}) {
+   List<DriverReassignment>? reassigned,  bool? isReassigned, String? rawOrigin, String? rawDestination, String? stageId, String? writeDate}) {
     return Transaction(
       id: id,
       name: name ?? this.name,
@@ -546,6 +558,8 @@ class Transaction {
       plReceivedBy: plReceivedBy,
 
       bookingRefNumber:bookingRefNumber,
+      rawOrigin: rawOrigin ?? this.rawOrigin,
+      rawDestination: rawDestination ?? this.rawDestination,
       
 
       login: login,
@@ -570,7 +584,7 @@ class Transaction {
       salesInvoice: salesInvoice,
       salesInvoiceFilename: salesInvoiceFilename,
 
-      isReassigned: isReassigned
+      isReassigned: isReassigned ?? this.isReassigned
       
     );
   }

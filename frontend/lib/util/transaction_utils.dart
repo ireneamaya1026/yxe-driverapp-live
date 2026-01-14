@@ -1,5 +1,9 @@
 import 'package:frontend/models/driver_reassignment_model.dart';
+import 'package:frontend/models/milestone_history_model.dart';
 import 'package:frontend/models/transaction_model.dart';
+import 'package:collection/collection.dart';
+
+
 
 class TransactionUtils {
   static String removeBrackets(String input) {
@@ -10,14 +14,14 @@ class TransactionUtils {
   }
 
   static String cleanAddress(List<String?> parts) {
-    return parts
-        .where((e) =>
-            e != null &&
-            e.trim().isNotEmpty &&
-            e.trim().toLowerCase() != 'ph')
-        .map((e) => removeBrackets(e!))
-        .join(', ');
-  }
+  return parts
+      .where((e) => e != null && e.trim().isNotEmpty)
+      .map((e) => removeBrackets(e!)
+          .replaceAll(RegExp(r'(^,)|(,$)'), '') // remove leading/trailing commas
+          .trim())
+      .where((e) => e.isNotEmpty && e.toLowerCase() != 'ph')
+      .join(', ');
+}
 
   static String buildConsigneeAddress(Transaction item,
       {bool cityLevel = false}) {
@@ -52,8 +56,9 @@ class TransactionUtils {
   static String newName(Transaction item) {
     return item.landTransport == 'transport'
         ? 'Deliver to Consignee'
-        : 'Pickup from Shipper';
+        : 'Pickup Laden';
   }
+
 
   /// Expands a transaction into multiple "legs" depending on dispatchType
   static List<Transaction> expandTransaction(
@@ -62,10 +67,12 @@ class TransactionUtils {
       final shipperOrigin = buildShipperAddress(item);
       final shipperDestination = cleanAddress([item.destination]);
 
+      
+
       return [
         if (item.deTruckDriverName == driverId)
           item.copyWith(
-            name: "Deliver to Shipper",
+            name: "Deliver Empty",
             origin: shipperDestination,
             destination: shipperOrigin,
             requestNumber: item.deRequestNumber,
@@ -75,7 +82,11 @@ class TransactionUtils {
             freightBookingNumber: item.freightBookingNumber,
             completedTime: item.deCompletedTime,
             truckPlateNumber: item.deTruckPlateNumber,
-            reassigned: item.reassigned
+            reassigned: item.reassigned,
+            rawOrigin: item.rawOrigin,
+  rawDestination: item.rawDestination,
+  stageId: item.stageId,
+  writeDate: item.writeDate
           ),
         if (item.plTruckDriverName == driverId)
           item.copyWith(
@@ -89,7 +100,11 @@ class TransactionUtils {
             freightBookingNumber: item.freightBookingNumber,
             completedTime: item.plCompletedTime,
             truckPlateNumber: item.plTruckPlateNumber,
-            reassigned: item.reassigned
+            reassigned: item.reassigned,
+            rawOrigin: item.rawOrigin,
+  rawDestination: item.rawDestination,
+   stageId: item.stageId,
+  writeDate: item.writeDate
           ),
       ];
     } else if (item.dispatchType == "dt") {
@@ -109,11 +124,15 @@ class TransactionUtils {
             freightBookingNumber: item.freightBookingNumber,
             completedTime: item.dlCompletedTime,
             truckPlateNumber: item.dlTruckPlateNumber,
-            reassigned: item.reassigned
+            reassigned: item.reassigned,
+           rawOrigin: item.rawOrigin,
+  rawDestination: item.rawDestination,
+   stageId: item.stageId,
+  writeDate: item.writeDate
           ),
         if (item.peTruckDriverName == driverId)
           item.copyWith(
-            name: "Pickup from Consignee",
+            name: "Pickup Empty",
             origin: consigneeOrigin,
             destination: consigneeDestination,
             requestNumber: item.peRequestNumber,
@@ -123,7 +142,11 @@ class TransactionUtils {
             freightBookingNumber: item.freightBookingNumber,
             completedTime: item.peCompletedTime,
             truckPlateNumber: item.peTruckPlateNumber,
-            reassigned: item.reassigned
+            reassigned: item.reassigned,
+            rawOrigin: item.rawOrigin,
+  rawDestination: item.rawDestination,
+   stageId: item.stageId,
+  writeDate: item.writeDate
           ),
       ];
     }
@@ -164,57 +187,31 @@ static List<Transaction> expandReassignments(
   }
 
   for (final e in reassignments) {
-    final driverList = e.driverId;
-    String? driverId = (driverList.isNotEmpty && driverList[0] != null)
-        ? driverList[0].toString()
+    final driverId = e.driverId.isNotEmpty ? e.driverId[0]?.toString() : null;
+    if (driverId != currentDriverId) continue;
+
+    final dispatchId = e.dispatchId.isNotEmpty
+        ? int.tryParse(e.dispatchId[0].toString())
         : null;
 
-//     final isCurrentDriver = driverId != null && driverId == currentDriverId;
+    final Transaction? parent =
+  allTransactions.firstWhereOrNull((t) => t.id == dispatchId);
 
-//    // Find original transaction by dispatch_id
-// // 🔹 STEP 1: Extract dispatch ID from reassignment
-// final dispatchIdValue = e.dispatchId.isNotEmpty ? e.dispatchId[0].toString() : null;
-// print('🔸 Checking reassignment id=${e.id}, request=${e.requestNumber}, dispatchId=$dispatchIdValue');
+    final tx = parent != null
+      ? parent.copyWith(
+          requestNumber: e.requestNumber,
+          requestStatus: 'Reassigned',
+          // ❌ clear lifecycle fields
+          stageId: null,
+          completedTime: e.createDate,
+          writeDate: null,
 
-// 🔹 STEP 2: Search for a matching transaction
-
-
-final isCurrentDriver = driverId != null && driverId == currentDriverId;
-if (!isCurrentDriver) {
-  print('⛔ Skipping reassignment ${e.requestNumber} — not current driver');
-  continue;
-}
-
-final dispatchIdValue = e.dispatchId.isNotEmpty ? e.dispatchId[0].toString() : null;
-final requestNumberValue = e.requestNumber;
-print('🔸 Checking reassignment id=${e.id}, request=$requestNumberValue, dispatchId=$dispatchIdValue');
-
-// find matching transaction by request number (and other leg fields)
-final matchingList = allTransactions.where((tx) =>
-    tx.requestNumber == e.requestNumber ||
-    tx.deRequestNumber == e.requestNumber ||
-    tx.plRequestNumber == e.requestNumber ||
-    tx.dlRequestNumber == e.requestNumber ||
-    tx.peRequestNumber == e.requestNumber
-).toList();
-
-final Transaction? matchingTx = matchingList.isNotEmpty ? matchingList.first : null;
-
-// debug prints
-if (matchingTx != null) {
-  print('🟢 MATCHED Transaction by request — id=${matchingTx.id}, '
-        'dispatchName=${matchingTx.name}, reqNo=${matchingTx.requestNumber}');
-} else {
-  print('🔴 NO MATCH FOUND for requestNo=${e.requestNumber}');
-}
-
-    // Build base transaction: either copy existing or create minimal new
-    final baseTx = matchingTx != null
-        ? matchingTx.copyWith(
-            isReassigned: isCurrentDriver,
-            originAddress: getOriginAddress(e.requestType),
-            reassigned: [e],
-          )
+          // ✅ reassignment timestamp
+          assignedDate: e.createDate,
+          isReassigned: true,
+          originAddress: getOriginAddress(e.requestType),
+          reassigned: [e],
+        )
         : Transaction(
             id: int.tryParse(e.id) ?? 0,
             name: '',
@@ -327,23 +324,169 @@ if (matchingTx != null) {
         stockDeliveryFilename: null,
         salesInvoice: null,
         salesInvoiceFilename: null,
-      );
+            );
 
-      
-      print('🧩 match result: isCurrentDriver=$isCurrentDriver, driverId=$driverId, currentDriverId=$currentDriverId');
+      // ✅ DO NOT expand reassigned transactions
+      result.add(tx);
+    }
 
-
-    print(
-      '🟢 MATCHED REASSIGNED — id=${baseTx.id}, reqNo=${baseTx.requestNumber}, isReassigned=${baseTx.isReassigned}'
-    );
-
-  
-    // Expand like normal transaction (OT/DT legs)
-    final expanded = TransactionUtils.expandTransaction(baseTx, currentDriverId);
-    result.addAll(expanded);
+    return result;
   }
 
-  return result;
+
+static Map<String, MilestoneHistoryModel?> getScheduleForTransaction(
+  Transaction transaction,
+  String driverId,
+  String? requestNumber
+) {
+  final dispatchType = transaction.dispatchType;
+  final history = transaction.history ?? [];
+  final serviceType = transaction.serviceType;
+  final dispatchId = transaction.id;
+  final transportMode = transaction.landTransport;
+
+  // Determine which leg the driver actually belongs to
+  String? matchingLeg;
+
+// Match using both driverId and requestNumber
+if (transaction.deTruckDriverName?.trim() == driverId.trim() &&
+    transaction.deRequestNumber == requestNumber) {
+  matchingLeg = 'de';
+} else if (transaction.plTruckDriverName?.trim() == driverId.trim() &&
+    transaction.plRequestNumber == requestNumber) {
+  matchingLeg = 'pl';
+} else if (transaction.dlTruckDriverName?.trim() == driverId.trim() &&
+    transaction.dlRequestNumber == requestNumber) {
+  matchingLeg = 'dl';
+} else if (transaction.peTruckDriverName?.trim() == driverId.trim() &&
+    transaction.peRequestNumber == requestNumber) {
+  matchingLeg = 'pe';
+}
+// print("Matching Leg: $matchingLeg request Number: $requestNumber");
+
+  if (matchingLeg == null) {
+    return {'pickup': null, 'delivery': null};
+  }
+
+  // Reference code map
+  final fclPrefixes = {
+    'ot': {
+      'freight':{
+        'Full Container Load': {
+          'de': {'delivery': 'TEOT', 'pickup': 'TYOT'},
+          'pl': {'delivery': 'CLOT', 'pickup': 'TLOT', 'email': 'ELOT'},
+        },
+        'Less-Than-Container Load': {
+          'pl': {'pickup': 'LTEOT'},
+        },
+      },
+      'transport':{
+         'Full Container Load': {
+          'pl': {'delivery': 'TCLOT', 'pickup': 'TTEOT'},
+        },
+        'Less-Than-Container Load': {
+          'pl': {'delivery': 'TCLOT', 'pickup': 'TTEOT'},
+        },
+      }
+
+      
+    },
+    'dt': {
+      'freight':{
+        'Full Container Load': {
+          'dl': {'delivery': 'CLDT', 'pickup': 'GYDT'},
+          'pe': {'delivery': 'CYDT', 'pickup': 'GLDT', 'email': 'EEDT'},
+        },
+        'Less-Than-Container Load': {
+          'dl': {'delivery': 'LCLDT'},
+        },
+      }
+      
+    }
+  };
+
+  final fclMap = fclPrefixes[dispatchType]?[transportMode]?[serviceType]?[matchingLeg];
+
+  // print("FCL Map: $fclMap");
+  if (fclMap == null) {
+    return {'pickup': null, 'delivery': null};
+  }
+
+  final pickupFcl = fclMap['pickup'];
+  final deliveryFcl = fclMap['delivery'];
+  final emailFcl = fclMap['email'];
+
+  MilestoneHistoryModel? pickupSchedule;
+  MilestoneHistoryModel? deliverySchedule;
+  MilestoneHistoryModel? emailSchedule;
+
+  bool matchFcl(MilestoneHistoryModel h, String fclCode) {
+  final matches = h.fclCode.trim().toUpperCase() == fclCode.toUpperCase() &&
+                  h.dispatchId.toString() == dispatchId.toString() &&
+                  h.serviceType == serviceType;
+  // if (matches) {
+  //   print('Matched FCL: ${h.fclCode}, dispatchId: ${h.dispatchId}, serviceType: ${h.serviceType}');
+  // } else {
+  //   print('No match: FCL(${h.fclCode}), dispatchId(${h.dispatchId}), serviceType(${h.serviceType})');
+  // }
+  return matches;
+}
+
+  if (pickupFcl != null) {
+    pickupSchedule = history.firstWhere(
+      (h) => matchFcl(h, pickupFcl),
+      orElse: () => const MilestoneHistoryModel(
+        id: -1,
+        dispatchId: '',
+        dispatchType: '',
+        fclCode: '',
+        scheduledDatetime: '',
+        actualDatetime: '',
+        serviceType: '',
+        isBackload: '',
+      ),
+    );
+    if (pickupSchedule.id == -1) pickupSchedule = null;
+  }
+
+  if (deliveryFcl != null) {
+    deliverySchedule = history.firstWhere(
+      (h) => matchFcl(h, deliveryFcl),
+      orElse: () => const MilestoneHistoryModel(
+        id: -1,
+        dispatchId: '',
+        dispatchType: '',
+        fclCode: '',
+        scheduledDatetime: '',
+        actualDatetime: '',
+        serviceType: '',
+        isBackload: '',
+      ),
+    );
+    if (deliverySchedule.id == -1) deliverySchedule = null;
+  }
+  if(emailFcl != null) {
+        emailSchedule = history.firstWhere(
+          (h) => 
+            h.fclCode.trim().toUpperCase() == emailFcl.toUpperCase() &&
+            h.dispatchId == dispatchId.toString() &&
+            h.serviceType == serviceType,
+          orElse: () => const MilestoneHistoryModel(
+            id: -1,
+            dispatchId: '',
+            dispatchType: '',
+            fclCode: '',
+            scheduledDatetime: '',
+            actualDatetime: '',
+            serviceType: '', isBackload: '',
+           
+          ),
+        );
+        if(emailSchedule.id == -1) emailSchedule  = null;
+      }
+
+  return {'pickup': pickupSchedule, 'delivery': deliverySchedule};
 }
 
 }
+

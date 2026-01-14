@@ -40,6 +40,10 @@ Route::middleware([HandleCors::class])->group(function () {
     Route::get('/odoo/booking/all-bookings', [FetchDataController::class, 'getAllBooking']);
     Route::get('/odoo/booking/all-history', [FetchDataController::class, 'getAllHistory']);
 
+    //Fetch transaction details for second screen
+    Route::get('/odoo/booking/transaction_details/{id}', [FetchDataController::class, 'getSecondScreenData']);
+    Route::get('/odoo/booking/history_details/{id}', [FetchDataController::class, 'getHistoryDetails']);
+
     Route::post('/odoo/notify', [TransactionController::class, 'notifyShipperConsignee']);
 
     Route::get('/odoo/booking/reassignment', [FetchDataController::class, 'reassignment']);

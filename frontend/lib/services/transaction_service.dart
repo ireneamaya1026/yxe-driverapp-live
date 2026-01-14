@@ -15,7 +15,7 @@ final transactionServiceProvider =
 class TransactionService {
   final _dio = Dio(
     BaseOptions(
-      baseUrl: 'http://192.76.45:8080/api',
+      baseUrl: 'http://192.76.86:8080/api',
       headers: {
         'Accept': 'application/json',
       },

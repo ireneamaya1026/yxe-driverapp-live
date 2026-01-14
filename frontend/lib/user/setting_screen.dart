@@ -161,7 +161,7 @@ class _SettingPageState extends ConsumerState<SettingScreen>{
                      
                       borderColor: Colors.transparent,
                       boxShadow: [
-                        const BoxShadow(
+                         BoxShadow(
                           color:Colors.black26,
                           spreadRadius: 1,
                           blurRadius: 2,
@@ -197,7 +197,7 @@ class _SettingPageState extends ConsumerState<SettingScreen>{
         height:40,
         child: Center(
           child: Text(
-            'DA.17.00.A.010',
+            'DA.17.00.A.020',
             style: AppTextStyles.caption.copyWith(
               color: Colors.black87,
             ),

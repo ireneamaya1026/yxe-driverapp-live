@@ -30,7 +30,7 @@ class ProgressRow extends StatelessWidget {
     final stepPage = [
       DetailedDetailScreen(uid: uid, transaction: transaction, relatedFF: relatedFF),
       ScheduleScreen(uid: uid, transaction: transaction, relatedFF: relatedFF),
-      ConfirmationScreen(uid: uid, transaction: transaction, relatedFF: relatedFF),
+      ConfirmationScreen(uid: uid, transaction: transaction, relatedFF: relatedFF, requestNumber: transaction?.requestNumber ?? '', id: transaction?.id ?? 0,),
     ];
 
     return Row(
@@ -75,7 +75,7 @@ class ProgressRow extends StatelessWidget {
                         textAlign: TextAlign.center,
                       ),
                       content: Text(
-                        errorMessage!,
+                        errorMessage,
                         textAlign: TextAlign.center,
                         style: AppTextStyles.body.copyWith(
                           color: Colors.black87
@@ -174,7 +174,7 @@ class ProgressRow extends StatelessWidget {
 
   String? _checkPrerequisites(dynamic transaction, String requestNumber, dynamic relatedFF) {
   
-    print('Related FF Stage ID from Progress Roww: ${relatedFF?.stageId}');
+    // print('Related FF Stage ID from Progress Roww: ${relatedFF?.stageId}');
 
  
     if (requestNumber == transaction.plRequestNumber &&
@@ -215,7 +215,7 @@ class ProgressRow extends StatelessWidget {
 
 
       if (requestNumber == transaction.plRequestNumber &&
-          transaction.deRequestStatus != "Completed" &&  transaction.deRequestStatus != "Backload") {
+          transaction.deRequestStatus != "Completed" && transaction.deRequestStatus != "Backload") {
         return "Delivery Empty should be completed first.";
       }
 

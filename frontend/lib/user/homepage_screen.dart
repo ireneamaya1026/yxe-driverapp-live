@@ -5,8 +5,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:frontend/models/pod_offline_model.dart';
 import 'package:frontend/models/reject_reason_model.dart';
 import 'package:frontend/models/transaction_model.dart';
 import 'package:frontend/notifiers/auth_notifier.dart';
@@ -17,10 +19,12 @@ import 'package:frontend/provider/transaction_provider.dart';
 import 'package:frontend/provider/reject_provider.dart';
 import 'package:frontend/theme/colors.dart';
 import 'package:frontend/theme/text_styles.dart';
+import 'package:frontend/user/confirmation.dart';
 import 'package:frontend/user/show_all_booking.dart';
 import 'package:frontend/util/transaction_utils.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:frontend/user/transaction_details.dart';
+import 'package:hive/hive.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
@@ -39,9 +43,16 @@ class HomepageScreen extends ConsumerStatefulWidget {
 
 class _HomepageScreenState extends ConsumerState<HomepageScreen> {
   String? uid;
+
+
   //  final Map<String, bool> _loadingStates = {};
   Future<void> _refreshTransaction() async {
     print("Refreshing transactions");
+    final hasInternet = await hasInternetConnection();
+    if (!hasInternet) {
+      print("No internet connection. Cannot refresh.");
+      return;
+    }
     try {
       final future = ref.refresh(filteredItemsProvider.future);
       await future; // Wait for the future to complete
@@ -51,14 +62,71 @@ class _HomepageScreenState extends ConsumerState<HomepageScreen> {
     }
    }
 
+   late StreamSubscription<List<ConnectivityResult>> _connectivitySubscription;
+
+   Future<bool> hasInternetConnection() async {
+    try {
+      final response = await http.get(Uri.parse("https://www.google.com"));
+      return response.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  
+  List<Transaction>? lastFetchedTransactions;
+
+  Future<void> _fetchLoadedTransactions() async {
+  final hasInternet = await hasInternetConnection();
+  if (!hasInternet) return; // do nothing if offline
+
+  try {
+    final transactions = await ref.read(filteredItemsProvider.future);
+    if (!mounted) return;
+    setState(() {
+      lastFetchedTransactions = transactions;
+    });
+  } catch (e) {
+    print("Error fetching transactions: $e");
+    // fallback to previous data
+    setState(() {
+      lastFetchedTransactions = lastFetchedTransactions ?? [];
+    });
+  }
+}
+  
+
+
   @override
   void initState() {
     super.initState();
 
     Future.microtask(() async {
-      ref.invalidate(bookingProvider);
-      await ref.refresh(allTransactionProvider.future); // if async
+      
+      await _fetchLoadedTransactions(); // if async
     });
+    _connectivitySubscription = Connectivity()
+      .onConnectivityChanged
+      .listen((List<ConnectivityResult> result) async {
+        if (!result.contains(ConnectivityResult.none)) {
+          print("Internet is back! Uploading pending PODs...");
+          await ref.read(pendingPodUploaderProvider).uploadPendingPods() ;
+        }
+      });
+
+      // Try upload once on startup
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await Future.delayed(const Duration(seconds: 1)); // small delay so network settles
+      if (await hasInternetConnection()) {
+        await ref.read(pendingPodUploaderProvider).uploadPendingPods() ;
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _connectivitySubscription.cancel();
+    super.dispose();
   }
 
 
@@ -345,17 +413,33 @@ class _HomepageScreenState extends ConsumerState<HomepageScreen> {
                                   child: Material(
                                     color: Colors.transparent,
                                     child: InkWell(
-                                      onTap: () {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (context) => TransactionDetails(
-                                              transaction: item,
-                                              id: item.id,
-                                              uid: uid ?? '',
+                                      onTap: () async {
+                                        final hasInternet = await hasInternetConnection();
+                                        if (hasInternet) {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (context) => TransactionDetails(
+                                                transaction: item,
+                                                id: item.id,
+                                                uid: uid ?? '',
+                                              ),
                                             ),
-                                          ),
-                                        );
+                                          );
+                                        } else {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (context) => ConfirmationScreen(
+                                                transaction: item,
+                                                id: item.id,
+                                                uid: uid ?? '', relatedFF: null, requestNumber: null,
+                                              ),
+                                            ),
+                                          );
+                                        }
+
+                                        
                                       },
                                       child: Padding(
                                         padding: const EdgeInsets.symmetric(horizontal: 14),

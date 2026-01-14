@@ -50,8 +50,8 @@ class ConsolidationModel {
       isBackload: isBackload,
       isDiverted: isDiverted,
 
-      consolOrigin: consolOrigin ?? this.consolOrigin,
-      consolDestination: consolDestination ?? this.consolDestination,
+      consolOrigin: consolOrigin ?? consolOrigin,
+      consolDestination: consolDestination ?? consolDestination,
 
     );
   }

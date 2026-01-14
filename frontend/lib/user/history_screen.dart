@@ -21,6 +21,7 @@ import 'package:frontend/user/transaction_details.dart';
 import 'package:frontend/util/transaction_utils.dart';
 import 'package:frontend/views/transaction_view.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 
 class HistoryScreen extends ConsumerStatefulWidget{
@@ -59,7 +60,7 @@ MilestoneHistoryModel? _getLatestMilestoneForLeg(Transaction tx, String leg) {
       .where((h) =>
           h.dispatchId.toString() == tx.id.toString() &&
           h.fclCode.toUpperCase().startsWith(leg.toUpperCase()) && // optional if your FCL codes use leg prefixes
-          h.actualDatetime?.isNotEmpty == true)
+          h.actualDatetime.isNotEmpty == true)
       .toList();
 
   if (matchingHistory.isEmpty) {
@@ -83,8 +84,8 @@ MilestoneHistoryModel? _getLatestMilestoneForLeg(Transaction tx, String leg) {
 
   // Sort by latest datetime
   matchingHistory.sort((a, b) {
-    final aTime = DateTime.tryParse(a.actualDatetime!) ?? DateTime.fromMillisecondsSinceEpoch(0);
-    final bTime = DateTime.tryParse(b.actualDatetime!) ?? DateTime.fromMillisecondsSinceEpoch(0);
+    final aTime = DateTime.tryParse(a.actualDatetime) ?? DateTime.fromMillisecondsSinceEpoch(0);
+    final bTime = DateTime.tryParse(b.actualDatetime) ?? DateTime.fromMillisecondsSinceEpoch(0);
     return bTime.compareTo(aTime);
   });
 
@@ -101,13 +102,14 @@ Map<String, String> getCompletedTransactionDatetime(Transaction tx) {
   }
 
   String? rawDateTime;
-
-if (tx.requestStatus == 'Completed') {
+if (tx.isReassigned == true) {
+  rawDateTime = tx.completedTime ; // always use reassignment's create_date
+} else if (tx.requestStatus == 'Completed') {
   rawDateTime = tx.completedTime?.isNotEmpty == true
       ? tx.completedTime
       : milestone?.actualDatetime ?? tx.backloadConsolidation?.consolidatedDatetime ?? tx.writeDate;
 } else if (tx.requestStatus == 'Backload') {
-  rawDateTime = tx.backloadConsolidation?.consolidatedDatetime?.isNotEmpty == true
+  rawDateTime = tx.backloadConsolidation?.consolidatedDatetime.isNotEmpty == true
       ? tx.backloadConsolidation?.consolidatedDatetime
       : milestone?.actualDatetime ?? tx.completedTime ?? tx.writeDate;
 } else if (tx.stageId == 'Cancelled') {
@@ -135,8 +137,22 @@ void initState() {
   });
 }
 
+Future<bool> hasInternetConnection() async {
+    try {
+      final response = await http.get(Uri.parse("https://www.google.com"));
+      return response.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+}
+
   Future<void> _refreshTransaction() async {
     print("Refreshing transactions");
+    final hasInternet = await hasInternetConnection();
+    if(!hasInternet){
+      print("Disabled refresh");
+      return;
+    }
     try {
       ref.invalidate(filteredItemsProviderForHistoryScreen);
       setState(() {
@@ -184,12 +200,6 @@ void initState() {
   
   @override
   Widget build(BuildContext context) {
-     
-  
-    
-    final acceptedTransaction = ref.watch(accepted_transaction.acceptedTransactionProvider);
-
-    
 
     return Scaffold(
       body: SafeArea(
@@ -269,17 +279,8 @@ void initState() {
                       );
                     }
 
-                     final transactionList = snapshot.data ?? [];
+                    final transactionList = snapshot.data ?? [];
 
-
-                    // If acceptedTransaction is a list, convert it to a Set of IDs for faster lookup
-                    final acceptedTransactionIds = acceptedTransaction;
-
-                    // Filtered list excluding transactions with IDs in acceptedTransaction
-                    final transaction = transactionList.where((t) {
-                      final key = "${t.id}-${t.requestNumber}";
-                        return !acceptedTransactionIds.contains(key);
-                    }).toList();
 
                    
                     final authPartnerId = ref.watch(authNotifierProvider).partnerId;
@@ -351,32 +352,23 @@ void initState() {
 
                    
                    
-                    String getStatusLabel(Transaction item, String currentDriverId, String currentDriverName) {
-  final status = item.requestStatus?.trim();
-  final stage = item.stageId?.trim();
+                   String getStatusLabel(Transaction item, String currentDriverId, String currentDriverName) {
+                      final status = item.requestStatus?.trim();
+                      final stage = item.stageId?.trim();
+                     final isReassigned = item.reassigned?.any(
+                        (r) => r.driverId.toString() == currentDriverId ||
+                              r.driverName.toLowerCase().contains(currentDriverName.toLowerCase()) &&
+                              r.requestNumber == item.requestNumber,
+                      ) ?? false;
 
-  final isReassigned = item.reassigned?.any(
-        (r) =>
-            (r.driverId.toString() == currentDriverId ||
-                r.driverName.toLowerCase().contains(currentDriverName.toLowerCase())) &&
-            r.requestNumber == item.requestNumber,
-      ) ??
-      false;
 
-  // If completed or cancelled, always show those first
-  if (status == 'Completed' || status == 'Backload') return status!;
-  if (stage == 'Completed' || stage == 'Cancelled') return stage!;
 
-  // Only show Reassigned if it's not completed/cancelled
-  if ((item.isReassigned == true || isReassigned) &&
-      status != 'Completed' &&
-      stage != 'Completed' &&
-      stage != 'Cancelled') {
-    return 'Reassigned';
-  }
+                      if (item.isReassigned == true || isReassigned) return 'Reassigned';
 
-  return '—';
-}
+                      if (status == 'Completed' || status == 'Backload') return status!;
+                      if (stage == 'Completed' || stage == 'Cancelled') return stage!;
+                      return '—';
+                    }
                            
 
              

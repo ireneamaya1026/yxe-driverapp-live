@@ -44,7 +44,7 @@ class PaginatedNotifier extends StateNotifier<PaginatedTransactionState>{
           final currentPage = result['current_page'];
           final lastPage = result['last_page'];
 
-          print("Response body for show all booking: ${response.body}");
+          // print("Response body for show all booking: ${response.body}");
 
           final newTransactions = list.map((item) => Transaction.fromJson(item)).toList();
 

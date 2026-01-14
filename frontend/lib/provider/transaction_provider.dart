@@ -14,6 +14,7 @@ import 'package:frontend/notifiers/paginated_state.dart';
 import 'package:frontend/notifiers/transaction_notifier.dart';
 import 'package:frontend/provider/accepted_transaction.dart' as accepted_transaction;
 import 'package:frontend/provider/base_url_provider.dart';
+import 'package:frontend/provider/hive_offline_provider.dart';
 import 'package:frontend/provider/reject_provider.dart';
 import 'package:frontend/provider/transaction_list_notifier.dart';
 import 'package:frontend/user/map_api.dart';
@@ -65,11 +66,9 @@ Future<List<Transaction>> fetchFilteredTransactions({
     final decoded = jsonDecode(response.body);
 
     if ((endpoint == 'history' || endpoint == 'all-history') && decoded['data']['reassigned'] != null) {
-  final reassignedJson = decoded['data']['reassigned'] as List;
-  print('🟣 Raw reassignment count from API: ${reassignedJson.length}');
-  for (final r in reassignedJson) {
-    print('🔸 raw id=${r['id']}, dispatch=${r['dispatch_id']?[1]}, request=${r['request_no']}');
-  }
+
+  
+ 
 }
 
     // Step 1: Parse normal transactions
@@ -93,6 +92,12 @@ Future<List<Transaction>> fetchFilteredTransactions({
 
     // Default: return normal transactions
     return transactions;
+  } on SocketException {
+    throw Exception("No internet connection. Please check your network.");
+  } on TimeoutException {
+    throw Exception("Netwokr timeout. Connection is unstable.");
+  } on ClientException {
+    throw Exception ("Network unstable. Please try again.");
   } catch (e) {
     throw Exception("Error fetching transactions: $e");
   }
@@ -330,3 +335,21 @@ final combinedTransactionProvider = FutureProvider<List<Transaction>>((ref) asyn
 });
 
 
+final completedFFsProvider = StateNotifierProvider<CompletedFFsNotifier, Map<String, Transaction>>((ref) {
+  return CompletedFFsNotifier();
+});
+
+final pendingPodUploaderProvider = Provider<PendingPodUploader>((ref) {
+  return PendingPodUploader();
+});
+class CompletedFFsNotifier extends StateNotifier<Map<String, Transaction>> {
+  CompletedFFsNotifier() : super({});
+
+  void updateFF(Transaction ffTx) {
+    if (ffTx.dispatchType == 'ff' && ffTx.bookingRefNumber != null) {
+      state = {...state, ffTx.bookingRefNumber!: ffTx};
+    }
+  }
+
+  Transaction? getFF(String bookingNumber) => state[bookingNumber];
+}
