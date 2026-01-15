@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:frontend/color_palette.dart';
+import 'package:frontend/models/pod_offline_model.dart';
 import 'package:frontend/provider/theme_provider.dart';
 import 'package:frontend/splashscreen.dart';
 import 'package:frontend/theme/text_styles.dart';
+import 'package:hive_flutter/adapters.dart';
 
 void main() async{
   WidgetsFlutterBinding.ensureInitialized();
@@ -12,6 +14,13 @@ void main() async{
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
   ]);
+
+  await Hive.initFlutter();
+
+   Hive.registerAdapter(PodModelAdapter());
+
+  // Open the box once at app startup
+  await Hive.openBox<PodModel>('pendingPods');
   runApp(const ProviderScope(child: MainApp()));
 }
 

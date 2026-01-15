@@ -24,8 +24,8 @@ class TransactionController extends Controller
     // protected $odoo_url = "http://192.168.118.102:8000/odoo/jsonrpc";
     protected $odoo_url = "https://yxe-odoo-yxe-live.odoo.com/jsonrpc";
 
-   
-   
+
+
     public function updateStatus(Request $request ,$transactionId)
     {
         // Log::info("Transaction ID is {$transactionId}");
@@ -400,7 +400,9 @@ class TransactionController extends Controller
                 "container_number" => $containerNumber,
                 
             ];
-            
+            $updateBookingStatus = [
+                "booking_status" => 1
+            ];
 
         }   
         if($type['dispatch_type'] === "dt" && $type['dl_request_no'] === $requestNumber) {
@@ -466,9 +468,6 @@ class TransactionController extends Controller
                 "dl_stock_delivery_receipt_filename" => $stock_delivery_receipt_filename,
                 "dl_sales_invoice" => $sales_invoice,
                 "dl_sales_invoice_filename" => $sales_invoice_filename
-            ];
-            $updateBookingStatus = [
-                "booking_status" => 1
             ];
             $updateBookingStatus = [
                 "booking_status" => 1
@@ -1050,7 +1049,7 @@ class TransactionController extends Controller
                                     [
                                         [$bookingIds],
                                         [
-                                            "stage_id" => 5
+                                            "stage_id" => 6
                                         ]
                                     ]
                                 ]
@@ -1800,7 +1799,7 @@ class TransactionController extends Controller
                                 'pd.consol.master',
                                 'search_read',
                                 [[['id', '=', $consolMasterId]]],
-                                ['fields' => ['id', 'status','is_cancelled']]
+                                ['fields' => ['id', 'status']]
                             ]
                         ],
                         'id' => rand(1000, 9999)
@@ -1825,7 +1824,7 @@ class TransactionController extends Controller
                                 'service' => 'object',
                                 'method' => 'execute_kw',
                                 'args' => [$db, $uid, $odooPassword, 'pd.consol.master', 'write',
-                                    [[$consolMasterId], ['status' => 'completed','is_cancelled' => true]]
+                                    [[$consolMasterId], ['status' => 'completed']]
                                 ]
                             ],
                             'id' => rand(1000, 9999)
@@ -1914,7 +1913,7 @@ class TransactionController extends Controller
         if (in_array($milestoneCodeToUpdate, ['CLOT', 'CLDT', 'TCLOT'])) {
             if ($bookingRef && !empty($updateBookingStatus)) {
                 Log::info("Triggering updateBookingStatus for bookingRef {$bookingRef}", ["status" => $updateBookingStatus]);
-                $this->updateBookingStatus($bookingRef, $db, $uid, $odooPassword, $odooUrl, $updateBookingStatus, $transactionId);
+                $this->updateBookingStatus($bookingRef, $db, $uid, $odooPassword, $odooUrl, $updateBookingStatus);
             } else {
                 Log::warning("Skipped updateBookingStatus — missing bookingRef or empty updateBookingStatus");
             }
@@ -1962,7 +1961,7 @@ class TransactionController extends Controller
                                 'pd.consol.master',
                                 'search_read',
                                 [[['id', '=', $consolMasterId]]],
-                                ['fields' => ['id', 'status','is_cancelled']]
+                                ['fields' => ['id', 'status']]
                             ]
                         ],
                         'id' => rand(1000, 9999)
@@ -1987,7 +1986,7 @@ class TransactionController extends Controller
                                 'service' => 'object',
                                 'method' => 'execute_kw',
                                 'args' => [$db, $uid, $odooPassword, 'pd.consol.master', 'write',
-                                    [[$consolMasterId], ['status' => 'completed','is_cancelled' => true]]
+                                    [[$consolMasterId], ['status' => 'completed']]
                                 ]
                             ],
                             'id' => rand(1000, 9999)
@@ -2006,7 +2005,6 @@ class TransactionController extends Controller
             }
         }
 
-        
         if ($milestoneCodeToUpdate) {
             return $this->updateMilestoneAndSendEmail(
                 $milestoneResult,   // ✅ use the same variable

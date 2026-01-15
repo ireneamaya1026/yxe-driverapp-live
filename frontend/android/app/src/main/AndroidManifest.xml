@@ -19,7 +19,7 @@
     <application
         android:usesCleartextTraffic="true"
         android:requestLegacyExternalStorage="true"
-        android:label="Beta: YXE Driver App"
+        android:label="YXE Driver App"
         android:name="${applicationName}"
         android:icon="@mipmap/xlogo"
         
